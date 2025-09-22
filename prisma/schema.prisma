@@ -1,0 +1,174 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  image     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  foodItems FoodItem[]
+
+  @@map("categories")
+}
+
+model FoodItem {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  price       Float
+  image       String?
+  isAvailable Boolean  @default(true)
+  category    Category @relation(fields: [categoryId], references: [id])
+  categoryId  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+
+  @@map("food_items")
+}
+
+model SpecialDeal {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  image       String?
+  discount    Float    // percentage or fixed amount
+  discountType DiscountType @default(PERCENTAGE)
+  minOrderAmount Float?
+  isActive    Boolean  @default(true)
+  validFrom   DateTime
+  validTo     DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("special_deals")
+}
+
+model Cart {
+  id        String     @id @default(cuid())
+  sessionId String     @unique
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  
+  items     CartItem[]
+
+  @@map("carts")
+}
+
+model CartItem {
+  id         String   @id @default(cuid())
+  cart       Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  cartId     String
+  foodItem   FoodItem @relation(fields: [foodItemId], references: [id])
+  foodItemId String
+  quantity   Int      @default(1)
+  price      Float    // price at the time of adding to cart
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([cartId, foodItemId])
+  @@map("cart_items")
+}
+
+model Order {
+  id               String      @id @default(cuid())
+  orderNumber      String      @unique
+  customerName     String
+  customerPhone    String
+  customerEmail    String?
+  deliveryAddress  String
+  latitude         Float?
+  longitude        Float?
+  distance         Float?      // in km
+  subtotal         Float
+  deliveryCharges  Float       @default(0)
+  discount         Float       @default(0)
+  total            Float
+  status           OrderStatus @default(PENDING)
+  paymentStatus    PaymentStatus @default(PENDING)
+  paymentMethod    PaymentMethod @default(CASH_ON_DELIVERY)
+  notes            String?
+  estimatedTime    Int?        // in minutes
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  
+  items            OrderItem[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id         String   @id @default(cuid())
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId    String
+  foodItem   FoodItem @relation(fields: [foodItemId], references: [id])
+  foodItemId String
+  quantity   Int
+  price      Float    // price at the time of order
+  total      Float    // quantity * price
+  createdAt  DateTime @default(now())
+
+  @@map("order_items")
+}
+
+enum Role {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+enum PaymentMethod {
+  CASH_ON_DELIVERY
+  CREDIT_CARD
+  DEBIT_CARD
+  PAYPAL
+  STRIPE
+}
