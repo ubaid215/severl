@@ -36,17 +36,7 @@ const slides: Slide[] = [
 
 export default function HeroCarousel() {
   return (
-    <div className="relative w-full h-[80vh]">
-      <style jsx global>{`
-        .swiper-pagination-bullet {
-          background-color: rgba(255, 255, 255, 0.5) !important;
-          opacity: 1 !important;
-        }
-        .swiper-pagination-bullet-active {
-          background-color: #fbbf24 !important; 
-        }
-      `}</style>
-      
+    <div className="relative w-full">
       <Swiper
         modules={[Pagination, Autoplay]}
         spaceBetween={0}
@@ -54,18 +44,23 @@ export default function HeroCarousel() {
         pagination={{ clickable: true }}
         autoplay={{ delay: 4000, disableOnInteraction: false }}
         loop={true}
-        className="w-full h-full"
+        className="w-full"
       >
         {slides.map((slide) => (
           <SwiperSlide key={slide.id}>
-            <div className="relative w-full h-[80vh]">
-              {/* Background image */}
+            <div
+              className="
+                relative w-full 
+                aspect-[1280/460]   
+                max-h-[520px]       /* limit height */
+                overflow-hidden
+              "
+            >
               <img
                 src={slide.image}
                 alt={slide.title}
-                className="w-full object-cover object-center"
+                className="w-full h-full object-cover object-center"
               />
-             
             </div>
           </SwiperSlide>
         ))}

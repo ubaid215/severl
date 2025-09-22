@@ -1,12 +1,17 @@
 @import "tailwindcss";
 
-:root{
-    background-color: #060d0d;
-    color: #ffffff;
-}
 
 button{
     cursor: pointer;
+}
+
+.swiper-pagination-bullet {
+  background-color: rgba(255, 255, 255, 0.5) !important;
+  opacity: 1 !important;
+}
+
+.swiper-pagination-bullet-active {
+  background-color: #fbbf24 !important;
 }
 
 

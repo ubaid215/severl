@@ -13,22 +13,22 @@ interface SearchResult {
 
 interface SearchBarProps {
   placeholder?: string;
-  onSearch: (query: string) => void;
-  onClear?: () => void;
+  onSearchAction: (query: string) => void;   // ✅ renamed
+  onClearAction?: () => void;                // ✅ renamed
   isLoading?: boolean;
   results?: SearchResult[];
-  onResultSelect?: (result: SearchResult) => void;
+  onResultSelectAction?: (result: SearchResult) => void;  // ✅ renamed
   debounceTime?: number;
   className?: string;
 }
 
 export default function SearchBar({
   placeholder = "Search menu items...",
-  onSearch,
-  onClear,
+  onSearchAction,
+  onClearAction,
   isLoading = false,
   results = [],
-  onResultSelect,
+  onResultSelectAction,
   debounceTime = 300,
   className = ""
 }: SearchBarProps) {
@@ -37,22 +37,26 @@ export default function SearchBar({
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // ✅ Debounced search
   useEffect(() => {
     const handler = setTimeout(() => {
-      if (query.trim()) {
-        onSearch(query);
-      } else if (onClear) {
-        onClear();
+      if (query.trim().length > 0) {
+        onSearchAction(query.trim());
+      } else {
+        if (onClearAction) onClearAction();
       }
     }, debounceTime);
 
     return () => clearTimeout(handler);
-  }, [query, debounceTime, onSearch, onClear]);
+  }, [query, debounceTime, onSearchAction, onClearAction]);
 
+  // ✅ Click outside handler
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node) &&
-          inputRef.current && !inputRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current && !dropdownRef.current.contains(event.target as Node) &&
+        inputRef.current && !inputRef.current.contains(event.target as Node)
+      ) {
         setIsFocused(false);
       }
     };
@@ -61,18 +65,20 @@ export default function SearchBar({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // ✅ Clear input
   const handleClear = () => {
     setQuery('');
-    if (onClear) onClear();
+    if (onClearAction) onClearAction();
+    setIsFocused(false);
     inputRef.current?.focus();
   };
 
+  // ✅ Result select
   const handleResultSelect = (result: SearchResult) => {
-    if (onResultSelect) {
-      onResultSelect(result);
-      setQuery(result.name);
-      setIsFocused(false);
-    }
+    setQuery(result.name);
+    setIsFocused(false);
+    if (onResultSelectAction) onResultSelectAction(result);
+    onSearchAction(result.name); // trigger search again
   };
 
   return (

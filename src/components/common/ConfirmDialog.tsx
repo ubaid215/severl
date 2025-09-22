@@ -6,8 +6,8 @@ import { X, AlertCircle, CheckCircle, Info, AlertTriangle } from 'lucide-react';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
+  onCloseAction: () => void;   // ✅ renamed
+  onConfirmAction: () => void; // ✅ renamed
   title: string;
   message: string | ReactNode;
   confirmText?: string;
@@ -17,8 +17,8 @@ interface ConfirmDialogProps {
 
 export default function ConfirmDialog({
   isOpen,
-  onClose,
-  onConfirm,
+  onCloseAction,
+  onConfirmAction,
   title,
   message,
   confirmText = 'Confirm',
@@ -45,7 +45,7 @@ export default function ConfirmDialog({
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-50" onClose={onClose}>
+      <Dialog as="div" className="relative z-50" onClose={onCloseAction}>
         <Transition.Child
           as={Fragment}
           enter="ease-out duration-300"
@@ -81,7 +81,7 @@ export default function ConfirmDialog({
                     </Dialog.Title>
                   </div>
                   <button
-                    onClick={onClose}
+                    onClick={onCloseAction}
                     className="rounded-full p-1 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                   >
                     <X className="h-5 w-5 text-gray-500 dark:text-gray-400" />
@@ -98,14 +98,14 @@ export default function ConfirmDialog({
                   <button
                     type="button"
                     className="inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 transition-colors"
-                    onClick={onClose}
+                    onClick={onCloseAction}
                   >
                     {cancelText}
                   </button>
                   <button
                     type="button"
                     className={`inline-flex justify-center rounded-md border border-transparent px-4 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors ${getConfirmButtonClass()}`}
-                    onClick={onConfirm}
+                    onClick={onConfirmAction}
                   >
                     {confirmText}
                   </button>
