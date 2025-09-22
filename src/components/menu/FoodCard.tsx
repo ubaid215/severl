@@ -1,8 +1,9 @@
-// components/FoodCard.tsx
 "use client";
 
 import Image from "next/image";
 import { ShoppingCart, Clock } from "lucide-react";
+import { getSessionId } from "@/utils/session";
+import { useState } from "react";
 
 interface FoodItem {
   id: string;
@@ -22,8 +23,41 @@ interface FoodCardProps {
 }
 
 export default function FoodCard({ foodItem }: FoodCardProps) {
+  const [loading, setLoading] = useState(false);
+
+  const handleAddToCart = async () => {
+    if (!foodItem.isAvailable) return;
+
+    try {
+      setLoading(true);
+      const sessionId = getSessionId();
+
+      const res = await fetch("/api/cart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          foodItemId: foodItem.id,
+          quantity: 1,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        console.log("✅ Added to cart:", data);
+        // Optionally trigger a toast or update cart context here
+      } else {
+        console.error("❌ Failed to add to cart:", data.error);
+      }
+    } catch (err) {
+      console.error("Add to cart error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="bg-[#101828]  rounded-xl shadow-yellow-100 overflow-hidden cursor-pointer border-2 hover:shadow-md transition-all duration-300 border-yellow-500/20">
+    <div className="bg-[#101828] rounded-xl shadow-yellow-100 overflow-hidden cursor-pointer border-2 hover:shadow-md transition-all duration-300 border-yellow-500/20">
       {/* Food Image */}
       <div className="relative h-40 w-full">
         {foodItem.image ? (
@@ -39,7 +73,6 @@ export default function FoodCard({ foodItem }: FoodCardProps) {
           </div>
         )}
 
-        {/* Availability Badge */}
         {!foodItem.isAvailable && (
           <div className="absolute top-2 right-2 bg-red-500 text-white px-3 py-1 rounded-full text-xs font-bold">
             Out of Stock
@@ -54,7 +87,7 @@ export default function FoodCard({ foodItem }: FoodCardProps) {
             {foodItem.name}
           </h3>
           <span className="text-xl font-bold text-yellow-500 whitespace-nowrap">
-            ${foodItem.price.toFixed(2)}
+            Rs {foodItem.price.toFixed(2)}
           </span>
         </div>
 
@@ -68,19 +101,20 @@ export default function FoodCard({ foodItem }: FoodCardProps) {
           </span>
 
           <button
+            onClick={handleAddToCart}
+            disabled={!foodItem.isAvailable || loading}
             className={`flex items-center 
-    px-3 py-1.5 sm:px-4 sm:py-2 
-    rounded-md text-xs sm:text-sm font-semibold
-    transition-all duration-200
-    ${
-      foodItem.isAvailable
-        ? "bg-yellow-500 text-black hover:bg-yellow-600 hover:scale-105"
-        : "bg-gray-600 text-gray-400 cursor-not-allowed"
-    }`}
-            disabled={!foodItem.isAvailable}
+              px-3 py-1.5 sm:px-4 sm:py-2 
+              rounded-md text-xs sm:text-sm font-semibold
+              transition-all duration-200
+              ${
+                foodItem.isAvailable
+                  ? "bg-yellow-500 text-black hover:bg-yellow-600 hover:scale-105"
+                  : "bg-gray-600 text-gray-400 cursor-not-allowed"
+              }`}
           >
             <ShoppingCart className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
-            {foodItem.isAvailable ? "Add to Cart" : "Unavailable"}
+            {loading ? "Adding..." : foodItem.isAvailable ? "Add to Cart" : "Unavailable"}
           </button>
         </div>
       </div>
