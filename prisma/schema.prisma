@@ -15,11 +15,98 @@ model User {
   email     String   @unique
   password  String
   name      String
+  phone     String?  @unique  // Add phone field for customer identification
   role      Role     @default(USER)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  
+  // Add these relations
+  addresses UserAddress[]
+  orders    Order[]
 
   @@map("users")
+}
+
+// NEW MODEL: User addresses for saving delivery locations
+model UserAddress {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String?  // Optional: "Home", "Work", etc.
+  address   String
+  latitude  Float?
+  longitude Float?
+  placeId   String?  // Google Places ID for more accurate results
+  isDefault Boolean  @default(false)
+  lastUsed  DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("user_addresses")
+}
+
+// Update Order model with new fields
+model Order {
+  id               String      @id @default(cuid())
+  orderNumber      String      @unique
+  customerName     String
+  customerPhone    String
+  customerEmail    String?
+  deliveryAddress  String
+  latitude         Float?
+  longitude        Float?
+  distance         Float?      // in km
+  subtotal         Float
+  deliveryCharges  Float       @default(0)
+  discount         Float       @default(0)
+  total            Float
+  status           OrderStatus @default(PENDING)
+  paymentStatus    PaymentStatus @default(PENDING)
+  paymentMethod    PaymentMethod @default(CASH_ON_DELIVERY)
+  notes            String?
+  estimatedTime    Int?        // in minutes
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  
+  // Add optional user relation for logged-in users
+  userId     String?
+  user       User?     @relation(fields: [userId], references: [id])
+  
+  items      OrderItem[]
+
+  @@map("orders")
+}
+
+// NEW MODEL: Restaurant configuration
+model RestaurantConfig {
+  id            String   @id @default(cuid())
+  name          String
+  address       String
+  latitude      Float
+  longitude     Float
+  phone         String
+  email         String?
+  deliveryRadius Float   @default(10) // in km
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("restaurant_config")
+}
+
+// NEW MODEL: Delivery zones for precise control
+model DeliveryZone {
+  id          String   @id @default(cuid())
+  name        String   // "Zone A", "Downtown", etc.
+  polygon     Json     // GeoJSON polygon coordinates
+  baseCharge  Float    @default(0)
+  chargePerKm Float?   // Additional charge per km beyond base
+  minOrder    Float?   // Minimum order amount for this zone
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("delivery_zones")
 }
 
 model Category {
@@ -96,32 +183,7 @@ model CartItem {
   @@map("cart_items")
 }
 
-model Order {
-  id               String      @id @default(cuid())
-  orderNumber      String      @unique
-  customerName     String
-  customerPhone    String
-  customerEmail    String?
-  deliveryAddress  String
-  latitude         Float?
-  longitude        Float?
-  distance         Float?      // in km
-  subtotal         Float
-  deliveryCharges  Float       @default(0)
-  discount         Float       @default(0)
-  total            Float
-  status           OrderStatus @default(PENDING)
-  paymentStatus    PaymentStatus @default(PENDING)
-  paymentMethod    PaymentMethod @default(CASH_ON_DELIVERY)
-  notes            String?
-  estimatedTime    Int?        // in minutes
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
-  
-  items            OrderItem[]
 
-  @@map("orders")
-}
 
 model OrderItem {
   id         String   @id @default(cuid())

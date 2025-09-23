@@ -5,7 +5,6 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, Plus, Minus, Trash2, Clock, ShoppingBag } from "lucide-react";
-import Navigation from "@/components/layout/Navigation";
 
 interface CartItem {
   id: string;
@@ -31,11 +30,14 @@ interface CartSummary {
 export default function CartPage() {
   const [cartData, setCartData] = useState<CartSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
   const [updatingItem, setUpdatingItem] = useState<string | null>(null);
-  const [sessionId, setSessionId] = useState<string>("");
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
-  // Initialize session ID
+  // Initialize everything on client only
   useEffect(() => {
+    setMounted(true);
+    
     let existingSessionId = localStorage.getItem("sessionId");
     if (!existingSessionId) {
       existingSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -46,7 +48,7 @@ export default function CartPage() {
 
   // Fetch cart data
   const fetchCart = async () => {
-    if (!sessionId) return;
+    if (!sessionId || !mounted) return;
     
     try {
       setLoading(true);
@@ -55,36 +57,47 @@ export default function CartPage() {
       
       if (data.success) {
         setCartData(data.data);
+      } else {
+        setCartData(null);
       }
     } catch (error) {
       console.error("Failed to fetch cart:", error);
+      setCartData(null);
     } finally {
       setLoading(false);
     }
   };
 
-  // Update item quantity
+  // Update item quantity - FIXED VERSION
   const updateQuantity = async (itemId: string, newQuantity: number) => {
-    if (newQuantity < 0) return;
+    if (newQuantity < 0 || !mounted || !sessionId) return;
     
     try {
       setUpdatingItem(itemId);
       
-      if (newQuantity === 0) {
-        await fetch(`/api/cart/${itemId}`, {
-          method: "DELETE",
-        });
-      } else {
-        await fetch(`/api/cart/${itemId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ quantity: newQuantity }),
-        });
+      const response = await fetch(`/api/cart/${itemId}`, {
+        method: "PUT",
+        headers: { 
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ 
+          quantity: newQuantity,
+          sessionId: sessionId 
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
+
+      const result = await response.json();
       
-      await fetchCart();
-      // Trigger cart update event for navigation
-      window.dispatchEvent(new CustomEvent('cartUpdated'));
+      if (result.success) {
+        await fetchCart();
+        window.dispatchEvent(new CustomEvent('cartUpdated'));
+      } else {
+        console.error("Failed to update quantity:", result.error);
+      }
     } catch (error) {
       console.error("Failed to update item:", error);
     } finally {
@@ -92,13 +105,25 @@ export default function CartPage() {
     }
   };
 
-  // Remove item from cart
+  // Remove item from cart - FIXED VERSION
   const removeItem = async (itemId: string) => {
+    if (!mounted || !sessionId) return;
+    
     try {
       setUpdatingItem(itemId);
-      await fetch(`/api/cart/${itemId}`, {
+      
+      const response = await fetch(`/api/cart/${itemId}`, {
         method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ sessionId }),
       });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
       await fetchCart();
       window.dispatchEvent(new CustomEvent('cartUpdated'));
     } catch (error) {
@@ -110,13 +135,20 @@ export default function CartPage() {
 
   // Clear entire cart
   const clearCart = async () => {
+    if (!sessionId || !mounted) return;
+    
     try {
       setLoading(true);
-      await fetch("/api/cart/clear", {
+      const response = await fetch("/api/cart/clear", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId }),
       });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
       await fetchCart();
       window.dispatchEvent(new CustomEvent('cartUpdated'));
     } catch (error) {
@@ -127,15 +159,51 @@ export default function CartPage() {
   };
 
   useEffect(() => {
-    if (sessionId) {
+    if (sessionId && mounted) {
       fetchCart();
     }
-  }, [sessionId]);
+  }, [sessionId, mounted]);
+
+  // Show loading state during SSR and initial client mount
+  if (!mounted || loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-[#101828] to-gray-900">
+        <div className="flex justify-center items-center py-20">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mb-4"></div>
+            <p className="text-gray-400">Loading your cart...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show empty cart state only after we've loaded data
+  if (!cartData || cartData.items.length === 0) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-[#101828] to-gray-900">
+        <div className="text-center py-20">
+          <ShoppingBag className="w-24 h-24 text-gray-600 mx-auto mb-6" />
+          <h2 className="text-2xl font-bold text-white mb-4">Your cart is empty</h2>
+          <p className="text-gray-400 mb-8">Looks like you haven't added anything to your cart yet.</p>
+          <Link
+            href="/menu"
+            className="inline-flex items-center bg-yellow-500 text-black px-6 py-3 rounded-lg font-semibold hover:bg-yellow-600 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Continue Shopping
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Safe helper functions to handle potential undefined values
+  const getSubtotal = () => cartData?.subtotal || 0;
+  const getItemCount = () => cartData?.itemCount || 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-[#101828] to-gray-900">
-      <Navigation />
-      
       <div className="max-w-4xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
@@ -151,191 +219,164 @@ export default function CartPage() {
           </div>
         </div>
 
-        {loading ? (
-          <div className="flex justify-center items-center py-20">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mb-4"></div>
-              <p className="text-gray-400">Loading your cart...</p>
-            </div>
-          </div>
-        ) : !cartData || cartData.items.length === 0 ? (
-          <div className="text-center py-20">
-            <ShoppingBag className="w-24 h-24 text-gray-600 mx-auto mb-6" />
-            <h2 className="text-2xl font-bold text-white mb-4">Your cart is empty</h2>
-            <p className="text-gray-400 mb-8">Looks like you haven't added anything to your cart yet.</p>
-            <Link
-              href="/menu"
-              className="inline-flex items-center bg-yellow-500 text-black px-6 py-3 rounded-lg font-semibold hover:bg-yellow-600 transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Continue Shopping
-            </Link>
-          </div>
-        ) : (
-          <div className="grid lg:grid-cols-3 gap-8">
-            {/* Cart Items */}
-            <div className="lg:col-span-2">
-              <div className="bg-[#101828] rounded-xl border-2 border-yellow-500/20 p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-xl font-bold text-white">
-                    Cart Items ({cartData.itemCount})
-                  </h2>
-                  <button
-                    onClick={clearCart}
-                    disabled={loading}
-                    className="text-red-500 hover:text-red-400 text-sm font-medium disabled:opacity-50"
-                  >
-                    Clear Cart
-                  </button>
-                </div>
+        <div className="grid lg:grid-cols-3 gap-8">
+          {/* Cart Items */}
+          <div className="lg:col-span-2">
+            <div className="bg-[#101828] rounded-xl border-2 border-yellow-500/20 p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-white">
+                  Cart Items ({getItemCount()})
+                </h2>
+                <button
+                  onClick={clearCart}
+                  disabled={loading}
+                  className="text-red-500 hover:text-red-400 text-sm font-medium disabled:opacity-50"
+                >
+                  Clear Cart
+                </button>
+              </div>
 
-                <div className="space-y-4">
-                  {cartData.items.map((item) => (
-                    <div key={item.id} className="relative">
-                      <div className="flex items-start gap-4 p-4 bg-black/30 rounded-lg border border-yellow-500/20">
-                        {/* Food Image */}
-                        <div className="relative w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden">
-                          {item.foodItem.image ? (
-                            <Image
-                              src={item.foodItem.image}
-                              alt={item.foodItem.name}
-                              fill
-                              className="object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full bg-gray-800 flex items-center justify-center">
-                              <Clock className="w-8 h-8 text-gray-600" />
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Item Details */}
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-white font-semibold text-lg mb-1">
-                            {item.foodItem.name}
-                          </h3>
-                          {item.foodItem.description && (
-                            <p className="text-gray-400 text-sm mb-3 line-clamp-2">
-                              {item.foodItem.description}
-                            </p>
-                          )}
-                          <p className="text-yellow-500 font-bold">
-                            Rs {item.foodItem.price.toFixed(2)} each
-                          </p>
-                        </div>
-
-                        {/* Quantity Controls */}
-                        <div className="flex items-center gap-3">
-                          <div className="flex items-center bg-black/50 rounded-lg border border-yellow-500/30">
-                            <button
-                              onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                              disabled={updatingItem === item.id || item.quantity <= 1}
-                              className="p-2 hover:bg-yellow-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            >
-                              <Minus className="w-4 h-4 text-yellow-500" />
-                            </button>
-                            
-                            <span className="px-4 py-2 text-white font-semibold min-w-[3rem] text-center">
-                              {updatingItem === item.id ? "..." : item.quantity}
-                            </span>
-                            
-                            <button
-                              onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                              disabled={updatingItem === item.id}
-                              className="p-2 hover:bg-yellow-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            >
-                              <Plus className="w-4 h-4 text-yellow-500" />
-                            </button>
+              <div className="space-y-4">
+                {cartData.items.map((item) => (
+                  <div key={item.id} className="relative">
+                    <div className="flex items-start gap-4 p-4 bg-black/30 rounded-lg border border-yellow-500/20">
+                      {/* Food Image */}
+                      <div className="relative w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden">
+                        {item.foodItem.image ? (
+                          <Image
+                            src={item.foodItem.image}
+                            alt={item.foodItem.name}
+                            fill
+                            className="object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gray-800 flex items-center justify-center">
+                            <Clock className="w-8 h-8 text-gray-600" />
                           </div>
-                          
-                          <button
-                            onClick={() => removeItem(item.id)}
-                            disabled={updatingItem === item.id}
-                            className="p-2 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors rounded-lg"
-                            title="Remove item"
-                          >
-                            <Trash2 className="w-4 h-4 text-red-500" />
-                          </button>
-                        </div>
-
-                        {/* Item Total */}
-                        <div className="text-right">
-                          <p className="text-lg font-bold text-yellow-500">
-                            Rs {(item.foodItem.price * item.quantity).toFixed(2)}
-                          </p>
-                        </div>
+                        )}
                       </div>
 
-                      {/* Loading Overlay */}
-                      {updatingItem === item.id && (
-                        <div className="absolute inset-0 bg-black/20 rounded-lg flex items-center justify-center">
-                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-yellow-500"></div>
+                      {/* Item Details */}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-white font-semibold text-lg mb-1">
+                          {item.foodItem.name}
+                        </h3>
+                        {item.foodItem.description && (
+                          <p className="text-gray-400 text-sm mb-3 line-clamp-2">
+                            {item.foodItem.description}
+                          </p>
+                        )}
+                        <p className="text-yellow-500 font-bold">
+                          Rs {(item.foodItem.price || 0).toFixed(2)} each
+                        </p>
+                      </div>
+
+                      {/* Quantity Controls */}
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center bg-black/50 rounded-lg border border-yellow-500/30">
+                          <button
+                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                            disabled={updatingItem === item.id || item.quantity <= 1}
+                            className="p-2 hover:bg-yellow-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            <Minus className="w-4 h-4 text-yellow-500" />
+                          </button>
+                          
+                          <span className="px-4 py-2 text-white font-semibold min-w-[3rem] text-center">
+                            {updatingItem === item.id ? "..." : item.quantity}
+                          </span>
+                          
+                          <button
+                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                            disabled={updatingItem === item.id}
+                            className="p-2 hover:bg-yellow-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            <Plus className="w-4 h-4 text-yellow-500" />
+                          </button>
                         </div>
-                      )}
+                        
+                        <button
+                          onClick={() => removeItem(item.id)}
+                          disabled={updatingItem === item.id}
+                          className="p-2 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors rounded-lg"
+                          title="Remove item"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                        </button>
+                      </div>
+
+                      {/* Item Total */}
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-yellow-500">
+                          Rs {((item.foodItem.price || 0) * item.quantity).toFixed(2)}
+                        </p>
+                      </div>
                     </div>
-                  ))}
-                </div>
-              </div>
-            </div>
 
-            {/* Order Summary */}
-            <div className="lg:col-span-1">
-              <div className="bg-[#101828] rounded-xl border-2 border-yellow-500/20 p-6 sticky top-24">
-                <h2 className="text-xl font-bold text-white mb-6">Order Summary</h2>
-                
-                <div className="space-y-4 mb-6">
-                  <div className="flex justify-between text-gray-300">
-                    <span>Subtotal ({cartData.itemCount} items):</span>
-                    <span>Rs {cartData.subtotal.toFixed(2)}</span>
+                    {/* Loading Overlay */}
+                    {updatingItem === item.id && (
+                      <div className="absolute inset-0 bg-black/20 rounded-lg flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-yellow-500"></div>
+                      </div>
+                    )}
                   </div>
-                  
-                  <div className="flex justify-between text-gray-300">
-                    <span>Delivery Charges:</span>
-                    <span>Rs {cartData.deliveryCharges.toFixed(2)}</span>
-                  </div>
-                  
-                  {cartData.deliveryCharges === 0 && (
-                    <p className="text-green-500 text-sm">🎉 Free delivery!</p>
-                  )}
-                  
-                  <hr className="border-yellow-500/20" />
-                  
-                  <div className="flex justify-between text-lg font-bold text-white">
-                    <span>Total:</span>
-                    <span className="text-yellow-500">Rs {cartData.total.toFixed(2)}</span>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <Link
-                    href="/checkout"
-                    className="w-full bg-yellow-500 text-black py-3 rounded-lg font-bold hover:bg-yellow-600 transition-colors flex items-center justify-center"
-                  >
-                    Proceed to Checkout
-                  </Link>
-                  
-                  <Link
-                    href="/menu"
-                    className="w-full bg-transparent border border-yellow-500 text-yellow-500 py-3 rounded-lg font-semibold hover:bg-yellow-500/10 transition-colors flex items-center justify-center"
-                  >
-                    Continue Shopping
-                  </Link>
-                </div>
-
-                {/* Delivery Info */}
-                <div className="mt-6 p-4 bg-black/30 rounded-lg border border-yellow-500/20">
-                  <h3 className="text-white font-semibold mb-2">Delivery Information</h3>
-                  <ul className="text-gray-400 text-sm space-y-1">
-                    <li>• Free delivery within 4km</li>
-                    <li>• Rs 50 for 4-6km distance</li>
-                    <li>• Rs 120 for above 6km</li>
-                    <li>• Estimated time: 30-45 minutes</li>
-                  </ul>
-                </div>
+                ))}
               </div>
             </div>
           </div>
-        )}
+
+          {/* Order Summary */}
+          <div className="lg:col-span-1">
+            <div className="bg-[#101828] rounded-xl border-2 border-yellow-500/20 p-6 sticky top-24">
+              <h2 className="text-xl font-bold text-white mb-6">Order Summary</h2>
+              
+              <div className="space-y-4 mb-6">
+                <div className="flex justify-between text-gray-300">
+                  <span>Subtotal ({getItemCount()} items):</span>
+                  <span>Rs {getSubtotal().toFixed(2)}</span>
+                </div>
+                
+                <div className="text-sm text-gray-400 p-3 bg-black/30 rounded-lg border border-yellow-500/20">
+                  Delivery charges will be calculated at checkout based on your location
+                </div>
+                
+                <hr className="border-yellow-500/20" />
+                
+                <div className="flex justify-between text-lg font-bold text-white">
+                  <span>Total:</span>
+                  <span className="text-yellow-500">Rs {getSubtotal().toFixed(2)}</span>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <Link
+                  href="/checkout"
+                  className="w-full bg-yellow-500 text-black py-3 rounded-lg font-bold hover:bg-yellow-600 transition-colors flex items-center justify-center"
+                >
+                  Proceed to Checkout
+                </Link>
+                
+                <Link
+                  href="/menu"
+                  className="w-full bg-transparent border border-yellow-500 text-yellow-500 py-3 rounded-lg font-semibold hover:bg-yellow-500/10 transition-colors flex items-center justify-center"
+                >
+                  Continue Shopping
+                </Link>
+              </div>
+
+              {/* Delivery Info */}
+              <div className="mt-6 p-4 bg-black/30 rounded-lg border border-yellow-500/20">
+                <h3 className="text-white font-semibold mb-2">Delivery Information</h3>
+                <ul className="text-gray-400 text-sm space-y-1">
+                  <li>• Free delivery within 4km</li>
+                  <li>• Rs 50 for 4-6km distance</li>
+                  <li>• Rs 120 for above 6km</li>
+                  <li>• Estimated time: 30-45 minutes</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -60,8 +60,8 @@ function calculateDistance(
   // If coordinates are provided, use simplified calculation
   if (latitude && longitude) {
     // Restaurant coordinates (should come from database or config)
-    const restaurantLat = 19.076; // Mumbai coordinates
-    const restaurantLng = 72.8777;
+    const restaurantLat = 31.391427; // FSD coordinates
+    const restaurantLng = 72.991881;
 
     // Simplified distance calculation (for demo purposes)
     // In a real app, use Haversine formula

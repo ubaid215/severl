@@ -74,7 +74,7 @@ export default function CartDrawer({
       } else {
         // Update quantity
         await fetch(`/api/cart/${itemId}`, {
-          method: "PATCH",
+          method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ quantity: newQuantity }),
         });
@@ -133,11 +133,10 @@ export default function CartDrawer({
   return (
     <>
       {/* Overlay */}
-     <div
-  className="fixed inset-0 bg-black/10 backdrop-blur-sm z-40 transition-opacity"
-  onClick={onClose}
-/>
-
+      <div
+        className="fixed inset-0 bg-black/10 backdrop-blur-sm z-40 transition-opacity"
+        onClick={onClose}
+      />
 
       {/* Drawer */}
       <div className="fixed right-0 top-0 h-full w-full max-w-md bg-[#101828] z-50 transform transition-transform border-l-2 border-yellow-500/20">
@@ -210,17 +209,14 @@ export default function CartDrawer({
                     <span>Subtotal:</span>
                     <span>Rs {(cartData?.subtotal ?? 0).toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between text-gray-300">
-                    <span>Delivery:</span>
-                    <span>
-                      Rs {(cartData?.deliveryCharges ?? 0).toFixed(2)}
-                    </span>
-                  </div>
                   <div className="flex justify-between text-lg font-bold text-white border-t border-yellow-500/20 pt-2">
                     <span>Total:</span>
                     <span className="text-yellow-500">
-                      Rs {(cartData?.total ?? 0).toFixed(2)}
+                      Rs {(cartData?.subtotal ?? 0).toFixed(2)}
                     </span>
+                  </div>
+                  <div className="text-sm text-gray-400 text-center">
+                    Delivery charges will be calculated at checkout
                   </div>
                 </div>
 

@@ -6,7 +6,6 @@ import Link from "next/link";
 import { 
   CheckCircle, Package, Clock, MapPin, Phone, Download, Share 
 } from "lucide-react";
-import Navigation from "@/components/layout/Navigation";
 
 interface OrderItem {
   id: string;
@@ -127,7 +126,7 @@ Thank you for your order! 🎉`;
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-[#101828] to-gray-900">
-        <Navigation />
+
         <div className="flex justify-center items-center py-20">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mb-4"></div>
@@ -141,7 +140,7 @@ Thank you for your order! 🎉`;
   if (!order) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-[#101828] to-gray-900">
-        <Navigation />
+
         <div className="text-center py-20">
           <h2 className="text-2xl font-bold text-white mb-4">Order Not Found</h2>
           <p className="text-gray-400 mb-6">Unable to find order details.</p>
@@ -158,7 +157,6 @@ Thank you for your order! 🎉`;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-[#101828] to-gray-900">
-      <Navigation />
       
       <div className="max-w-2xl mx-auto px-4 py-8">
         {/* Success Header */}
@@ -274,7 +272,7 @@ Thank you for your order! 🎉`;
           )}
 
           {/* Actions */}
-          <div className="flex flex-col sm:flex-row gap-3">
+          {/* <div className="flex flex-col sm:flex-row gap-3">
             <button 
               onClick={downloadReceipt}
               className="flex items-center justify-center gap-2 bg-yellow-500 text-black px-4 py-2 rounded-lg font-semibold hover:bg-yellow-600 transition-colors"
@@ -287,7 +285,7 @@ Thank you for your order! 🎉`;
             >
               <Share className="w-4 h-4" /> Share on WhatsApp
             </button>
-          </div>
+          </div> */}
         </div>
 
         {/* Back to Menu */}

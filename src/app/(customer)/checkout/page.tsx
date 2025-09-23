@@ -4,7 +4,6 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft, MapPin, Phone, Mail, User, CreditCard, Truck } from "lucide-react";
-import Navigation from "@/components/layout/Navigation";
 
 interface CartItem {
   id: string;
@@ -38,7 +37,8 @@ export default function CheckoutPage() {
   const [cartData, setCartData] = useState<CartSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [sessionId, setSessionId] = useState<string>("");
+  const [mounted, setMounted] = useState(false); 
+  const [sessionId, setSessionId] = useState<string | null>(null); // Start as null
   const [formData, setFormData] = useState<CheckoutForm>({
     customerName: "",
     customerPhone: "",
@@ -48,19 +48,26 @@ export default function CheckoutPage() {
     notes: ""
   });
 
-  // Initialize session ID
+  // Set mounted state on client only
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Initialize session ID - client only
+  useEffect(() => {
+    if (!mounted) return;
+    
     let existingSessionId = localStorage.getItem("sessionId");
     if (!existingSessionId) {
       existingSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       localStorage.setItem("sessionId", existingSessionId);
     }
     setSessionId(existingSessionId);
-  }, []);
+  }, [mounted]);
 
-  // Fetch cart data
+  // Fetch cart data - client only
   const fetchCart = async () => {
-    if (!sessionId) return;
+    if (!sessionId || !mounted) return;
     
     try {
       setLoading(true);
@@ -70,21 +77,21 @@ export default function CheckoutPage() {
       if (data.success && data.data) {
         setCartData(data.data);
       } else {
-        // Redirect to cart if no items
         window.location.href = "/cart";
       }
     } catch (error) {
       console.error("Failed to fetch cart:", error);
+      setCartData(null);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (sessionId) {
+    if (sessionId && mounted) {
       fetchCart();
     }
-  }, [sessionId]);
+  }, [sessionId, mounted]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -121,7 +128,8 @@ export default function CheckoutPage() {
       const result = await response.json();
 
       if (response.ok && result.order) {
-        // Redirect to success page with order number
+        // Clear cart after successful order
+        localStorage.removeItem("sessionId");
         window.location.href = `/checkout/success?orderNumber=${result.order.orderNumber}`;
       } else {
         throw new Error(result.error || "Failed to create order");
@@ -134,10 +142,16 @@ export default function CheckoutPage() {
     }
   };
 
-  if (loading) {
+  // Safe helper functions to handle potential undefined values
+  const getSubtotal = () => cartData?.subtotal || 0;
+  const getDeliveryCharges = () => cartData?.deliveryCharges || 0;
+  const getTotal = () => cartData?.total || 0;
+  const getItemCount = () => cartData?.itemCount || 0;
+
+  // Show loading state during hydration
+  if (!mounted || loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-[#101828] to-gray-900">
-        <Navigation />
         <div className="flex justify-center items-center py-20">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mb-4"></div>
@@ -151,7 +165,6 @@ export default function CheckoutPage() {
   if (!cartData || cartData.items.length === 0) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-[#101828] to-gray-900">
-        <Navigation />
         <div className="text-center py-20">
           <h2 className="text-2xl font-bold text-white mb-4">No items in cart</h2>
           <Link href="/menu" className="text-yellow-500 hover:underline">
@@ -164,8 +177,6 @@ export default function CheckoutPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-[#101828] to-gray-900">
-      <Navigation />
-      
       <div className="max-w-4xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
@@ -184,7 +195,7 @@ export default function CheckoutPage() {
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Checkout Form */}
           <div className="lg:col-span-2">
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-6" id="checkout-form">
               {/* Customer Information */}
               <div className="bg-[#101828] rounded-xl border-2 border-yellow-500/20 p-6">
                 <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
@@ -277,11 +288,7 @@ export default function CheckoutPage() {
                 
                 <div className="space-y-3">
                   {[
-                    { value: "CASH_ON_DELIVERY", label: "Cash on Delivery", icon: "💵" },
-                    { value: "CREDIT_CARD", label: "Credit Card", icon: "💳" },
-                    { value: "DEBIT_CARD", label: "Debit Card", icon: "💳" },
-                    { value: "PAYPAL", label: "PayPal", icon: "🅿️" },
-                    { value: "STRIPE", label: "Stripe", icon: "💳" }
+                    { value: "CASH_ON_DELIVERY", label: "Cash on Delivery", icon: "💵" }
                   ].map((method) => (
                     <label key={method.value} className="flex items-center p-3 border border-yellow-500/30 rounded-lg hover:bg-yellow-500/5 cursor-pointer">
                       <input
@@ -339,7 +346,7 @@ export default function CheckoutPage() {
                       {item.quantity}x {item.foodItem.name}
                     </span>
                     <span className="text-white">
-                      Rs {(item.foodItem.price * item.quantity).toFixed(2)}
+                      Rs {((item.foodItem.price || 0) * item.quantity).toFixed(2)}
                     </span>
                   </div>
                 ))}
@@ -351,15 +358,15 @@ export default function CheckoutPage() {
               <div className="space-y-2 mb-6">
                 <div className="flex justify-between text-gray-300">
                   <span>Subtotal:</span>
-                  <span>Rs {cartData.subtotal.toFixed(2)}</span>
+                  <span>Rs {getSubtotal().toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-gray-300">
                   <span>Delivery:</span>
-                  <span>Rs {cartData.deliveryCharges.toFixed(2)}</span>
+                  <span>Rs {getDeliveryCharges().toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-lg font-bold text-white border-t border-yellow-500/20 pt-2">
                   <span>Total:</span>
-                  <span className="text-yellow-500">Rs {cartData.total.toFixed(2)}</span>
+                  <span className="text-yellow-500">Rs {getTotal().toFixed(2)}</span>
                 </div>
               </div>
 
@@ -367,7 +374,7 @@ export default function CheckoutPage() {
               <button
                 type="submit"
                 form="checkout-form"
-                disabled={submitting}
+                disabled={submitting || !cartData}
                 onClick={handleSubmit}
                 className="w-full bg-yellow-500 text-black py-3 rounded-lg font-bold hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >

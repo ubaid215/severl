@@ -128,7 +128,7 @@ export default function Navigation() {
 
           {/* Mobile Navigation Menu */}
           {isMenuOpen && (
-            <div className="md:hidden border-t border-yellow-500/20">
+            <div className="md:hidden border-t border-yellow-500/20 absolute z-50 bg-[#101828] w-full">
               <div className="px-2 pt-2 pb-3 space-y-1">
                 {navLinks.map((link) => {
                   const IconComponent = link.icon;

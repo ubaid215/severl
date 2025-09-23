@@ -247,7 +247,7 @@ export default function MenuPage() {
               <div className="p-4">
                 <div className="flex justify-between items-start mb-2">
                   <h3 className="font-semibold text-lg text-white truncate">{item.name}</h3>
-                  <span className="text-yellow-500 font-bold">${item.price}</span>
+                  <span className="text-yellow-500 font-bold">Rs {item.price}</span>
                 </div>
                 
                 <p className="text-gray-400 text-sm mb-3 line-clamp-2">{item.description}</p>

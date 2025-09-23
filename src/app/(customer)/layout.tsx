@@ -1,3 +1,4 @@
+import Footer from "@/components/layout/Footer";
 import Navigation from "@/components/layout/Navigation";
 import { ReactNode } from "react";
 
@@ -6,20 +7,12 @@ export const metadata = {
   description: "Customer dashboard and pages",
 };
 
-export default function CustomerLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export default function CustomerLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
-      <body>
-        <Navigation/>
-        <main>{children}</main>
-        <footer className="bg-gray-200 p-4 text-center">
-          Footer
-        </footer>
-      </body>
-    </html>
+    <>
+      <Navigation />
+      <main>{children}</main>
+      <Footer/>
+    </>
   );
 }

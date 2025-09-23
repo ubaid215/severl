@@ -213,7 +213,7 @@ const toggleStatus = async (id: string) => {
                     {deal.minOrderAmount && (
                       <div className="flex items-center text-sm">
                         <DollarSign size={16} className="text-yellow-500 mr-1" />
-                        <span>Min: ${deal.minOrderAmount}</span>
+                        <span>Min: Rs {deal.minOrderAmount}</span>
                       </div>
                     )}
                   </div>
