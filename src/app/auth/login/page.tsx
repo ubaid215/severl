@@ -69,7 +69,7 @@ export default function LoginPage() {
         localStorage.setItem('admin_user', JSON.stringify(data.data.user))
         
         // Redirect to admin dashboard
-        router.push('/admin/dashboard')
+        router.push('/admin')
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred'

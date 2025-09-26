@@ -12,7 +12,8 @@ import {
   LogOut, 
   ChevronLeft, 
   ChevronRight,
-  User
+  User,
+  ClipboardCheckIcon
 } from 'lucide-react'
 
 interface User {
@@ -46,11 +47,7 @@ export default function AdminSideBar({ user }: AdminSideBarProps) {
   }
 
   const navigationItems = [
-    { 
-      label: 'Dashboard', 
-      href: '/admin/dashboard', 
-      icon: BarChart3
-    },
+    
     { 
       label: 'Categories', 
       href: '/admin/categories', 
@@ -67,10 +64,15 @@ export default function AdminSideBar({ user }: AdminSideBarProps) {
       icon: ClipboardList
     },
     { 
-      label: 'Special Deals', 
-      href: '/admin/special-deals', 
-      icon: Zap
+      label: 'Create Orders', 
+      href: '/admin/orders/create', 
+      icon: ClipboardCheckIcon
     },
+    // { 
+    //   label: 'Special Deals', 
+    //   href: '/admin/special-deals', 
+    //   icon: Zap
+    // },
     { 
       label: 'Analytics', 
       href: '/admin/analytics', 
@@ -78,9 +80,13 @@ export default function AdminSideBar({ user }: AdminSideBarProps) {
     }
   ]
 
-  const isActiveRoute = (href: string) => {
-    return pathname === href || pathname.startsWith(href + '/')
+ const isActiveRoute = (href: string) => {
+  if (href === '/admin/orders') {
+    // Only match exactly /admin/orders, not its children
+    return pathname === '/admin/orders'
   }
+  return pathname === href || pathname.startsWith(href + '/')
+}
 
   // Show loading state until mounted to prevent hydration mismatch
   if (!mounted) {

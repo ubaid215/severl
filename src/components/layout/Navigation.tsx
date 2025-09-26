@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { ShoppingCart, Menu, X, Home, UtensilsCrossed, Phone, User } from "lucide-react";
 import CartDrawer from "../cart/CartDrawer";
 
@@ -62,7 +63,6 @@ export default function Navigation() {
     { href: "/", label: "Home", icon: Home },
     { href: "/menu", label: "Menu", icon: UtensilsCrossed },
     { href: "/contact", label: "Contact", icon: Phone },
-    { href: "/profile", label: "Profile", icon: User },
   ];
 
   return (
@@ -71,13 +71,15 @@ export default function Navigation() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
-            <Link href="/" className="flex items-center space-x-2">
-              <div className="bg-yellow-500 p-2 rounded-lg">
-                <UtensilsCrossed className="w-6 h-6 text-black" />
-              </div>
-              <span className="text-xl font-bold text-white">
-                Tasty<span className="text-yellow-500">Bites</span>
-              </span>
+            <Link href="/" className="flex items-center">
+              <Image
+                src="/images/logo-severl.png"
+                alt="Several - The Taste Of Life"
+                width={180}
+                height={100}
+                className="h-16 w-auto"
+                priority
+              />
             </Link>
 
             {/* Desktop Navigation */}

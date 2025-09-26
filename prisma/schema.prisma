@@ -94,20 +94,6 @@ model RestaurantConfig {
   @@map("restaurant_config")
 }
 
-// NEW MODEL: Delivery zones for precise control
-model DeliveryZone {
-  id          String   @id @default(cuid())
-  name        String   // "Zone A", "Downtown", etc.
-  polygon     Json     // GeoJSON polygon coordinates
-  baseCharge  Float    @default(0)
-  chargePerKm Float?   // Additional charge per km beyond base
-  minOrder    Float?   // Minimum order amount for this zone
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@map("delivery_zones")
-}
 
 model Category {
   id        String   @id @default(cuid())

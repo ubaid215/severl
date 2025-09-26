@@ -336,9 +336,7 @@ export default function CartPage() {
                   <span>Rs {getSubtotal().toFixed(2)}</span>
                 </div>
                 
-                <div className="text-sm text-gray-400 p-3 bg-black/30 rounded-lg border border-yellow-500/20">
-                  Delivery charges will be calculated at checkout based on your location
-                </div>
+                
                 
                 <hr className="border-yellow-500/20" />
                 
@@ -364,16 +362,6 @@ export default function CartPage() {
                 </Link>
               </div>
 
-              {/* Delivery Info */}
-              <div className="mt-6 p-4 bg-black/30 rounded-lg border border-yellow-500/20">
-                <h3 className="text-white font-semibold mb-2">Delivery Information</h3>
-                <ul className="text-gray-400 text-sm space-y-1">
-                  <li>• Free delivery within 4km</li>
-                  <li>• Rs 50 for 4-6km distance</li>
-                  <li>• Rs 120 for above 6km</li>
-                  <li>• Estimated time: 30-45 minutes</li>
-                </ul>
-              </div>
             </div>
           </div>
         </div>

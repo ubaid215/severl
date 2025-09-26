@@ -2,6 +2,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { UtensilsCrossed, Phone, Mail, MapPin, Clock, Facebook, Instagram, Twitter } from "lucide-react";
 
 export default function Footer() {
@@ -12,18 +13,16 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-4 py-8 lg:py-12">
         {/* Mobile Layout */}
         <div className="block lg:hidden">
-          {/* Logo and Tagline */}
+          {/* Logo */}
           <div className="text-center mb-6">
-            <Link href="/" className="inline-flex flex-col items-center">
-              <div className="bg-yellow-500 p-3 rounded-lg mb-2">
-                <UtensilsCrossed className="w-8 h-8 text-black" />
-              </div>
-              <span className="text-xl font-bold text-white mb-1">
-                Severl
-              </span>
-              <span className="text-yellow-500 text-sm italic">
-                The taste of life
-              </span>
+            <Link href="/" className="inline-block">
+              <Image
+                src="/images/logo-severl1.png"
+                alt="Several - The Taste Of Life"
+                width={200}
+                height={60}
+                className="h-20 w-auto"
+              />
             </Link>
           </div>
 
@@ -87,18 +86,16 @@ export default function Footer() {
 
         {/* Desktop Layout */}
         <div className="hidden lg:block">
-          {/* Logo and Tagline at Top Center */}
+          {/* Logo at Top Center */}
           <div className="text-center mb-12">
-            <Link href="/" className="inline-flex flex-col items-center">
-              <div className="bg-yellow-500 p-4 rounded-xl mb-3">
-                <UtensilsCrossed className="w-12 h-12 text-black" />
-              </div>
-              <span className="text-3xl font-bold text-white mb-2">
-                Severl
-              </span>
-              <span className="text-yellow-500 text-lg italic">
-                The taste of life
-              </span>
+            <Link href="/" className="inline-block">
+              <Image
+                src="/images/logo-severl1.png"
+                alt="Several - The Taste Of Life"
+                width={200}
+                height={60}
+                className="h-32 w-auto"
+              />
             </Link>
           </div>
 
@@ -135,16 +132,6 @@ export default function Footer() {
                     Contact
                   </Link>
                 </li>
-                <li>
-                  <Link href="/careers" className="text-gray-300 hover:text-yellow-500 transition-colors">
-                    Careers
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/franchise" className="text-gray-300 hover:text-yellow-500 transition-colors">
-                    Franchise
-                  </Link>
-                </li>
               </ul>
             </div>
 
@@ -155,26 +142,6 @@ export default function Footer() {
                 <li>
                   <Link href="/delivery" className="text-gray-300 hover:text-yellow-500 transition-colors">
                     Home Delivery
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/catering" className="text-gray-300 hover:text-yellow-500 transition-colors">
-                    Catering
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/events" className="text-gray-300 hover:text-yellow-500 transition-colors">
-                    Event Planning
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/reservations" className="text-gray-300 hover:text-yellow-500 transition-colors">
-                    Table Reservations
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/gift-cards" className="text-gray-300 hover:text-yellow-500 transition-colors">
-                    Gift Cards
                   </Link>
                 </li>
               </ul>
