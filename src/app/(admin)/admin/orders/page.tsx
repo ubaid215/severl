@@ -68,22 +68,20 @@ export default function OrdersPage() {
   const dropdownRefs = useRef<{[key: string]: HTMLDivElement | null}>({});
 
   // Close dropdown when clicking outside
-useEffect(() => {
-  const handleClickOutside = (event: MouseEvent) => {
-    if (dropdownOpen) {
-      const ref = dropdownRefs.current[dropdownOpen];
-      // Add a small delay to allow the click to register on dropdown options
-      if (ref && !ref.contains(event.target as Node)) {
-        setTimeout(() => {
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownOpen) {
+        const ref = dropdownRefs.current[dropdownOpen];
+        if (ref && !ref.contains(event.target as Node)) {
           setDropdownOpen(null);
-        }, 100);
+        }
       }
-    }
-  };
+    };
 
-  document.addEventListener('mousedown', handleClickOutside);
-  return () => document.removeEventListener('mousedown', handleClickOutside);
-}, [dropdownOpen]);
+    // Use 'click' instead of 'mousedown' for better compatibility
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [dropdownOpen]);
 
   useEffect(() => {
     fetchOrders();
@@ -127,45 +125,47 @@ useEffect(() => {
   };
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
-  console.log('🚀 updateOrderStatus called:', { orderId, newStatus });
-  
-  setUpdatingOrderId(orderId);
-  try {
-    const token = localStorage.getItem('admin_token');
-    console.log('📝 Token exists:', !!token);
+    console.log('🚀 updateOrderStatus called:', { orderId, newStatus });
     
-    const response = await fetch(`/api/orders/${orderId}/status`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({ status: newStatus }),
-    });
-
-    console.log('📊 Response status:', response.status);
-    console.log('📊 Response ok:', response.ok);
-
-    if (response.ok) {
-      const updatedOrder = await response.json();
-      console.log('✅ Update successful:', updatedOrder);
-      
-      setOrders(prev => prev.map(order => 
-        order.id === orderId ? { ...order, status: newStatus } : order
-      ));
-      // Refresh status counts
-      fetchStatusCounts();
-    } else {
-      const errorData = await response.json();
-      console.error('❌ Update failed:', errorData);
-    }
-  } catch (error) {
-    console.error('❌ Error updating order status:', error);
-  } finally {
-    setUpdatingOrderId(null);
+    // Close dropdown immediately
     setDropdownOpen(null);
-  }
-};
+    setUpdatingOrderId(orderId);
+    
+    try {
+      const token = localStorage.getItem('admin_token');
+      console.log('📝 Token exists:', !!token);
+      
+      const response = await fetch(`/api/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      console.log('📊 Response status:', response.status);
+      console.log('📊 Response ok:', response.ok);
+
+      if (response.ok) {
+        const updatedOrder = await response.json();
+        console.log('✅ Update successful:', updatedOrder);
+        
+        setOrders(prev => prev.map(order => 
+          order.id === orderId ? { ...order, status: newStatus } : order
+        ));
+        // Refresh status counts
+        fetchStatusCounts();
+      } else {
+        const errorData = await response.json();
+        console.error('❌ Update failed:', errorData);
+      }
+    } catch (error) {
+      console.error('❌ Error updating order status:', error);
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  };
 
   const shareOrderWithRider = (order: Order) => {
     const orderDetails = `
@@ -225,18 +225,29 @@ ${order.notes ? `📝 SPECIAL NOTES:\n${order.notes}` : ''}
     }
   };
 
-const StatusDropdown = ({ order }: { order: Order }) => {
+ const StatusDropdown = ({ order }: { order: Order }) => {
   const isOpen = dropdownOpen === order.id;
   
-  // Ensure statusOptions has all values
   const allStatusOptions = [
     'PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'
   ];
 
+  const handleStatusClick = (e: React.MouseEvent, status: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    updateOrderStatus(order.id, status);
+  };
+
+  const handleToggleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDropdownOpen(isOpen ? null : order.id);
+  };
+
   return (
-    <div className="relative" ref={el => { dropdownRefs.current[order.id] = el; }}>
+    <div className="relative" ref={el => { dropdownRefs.current[order.id] = el; }} style={{ zIndex: isOpen ? 1000 : 'auto' }}>
       <button
-        onClick={() => setDropdownOpen(isOpen ? null : order.id)}
+        onClick={handleToggleClick}
         disabled={updatingOrderId === order.id}
         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border cursor-pointer hover:opacity-80 transition-opacity ${getStatusColor(order.status)} ${
           updatingOrderId === order.id ? 'opacity-50 cursor-not-allowed' : ''
@@ -254,14 +265,21 @@ const StatusDropdown = ({ order }: { order: Order }) => {
       </button>
 
       {isOpen && (
-        <div className="absolute z-50 top-full left-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg min-w-[180px]">
+        <div 
+          className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl min-w-[180px]"
+          style={{ 
+            zIndex: 1000,
+            backgroundColor: 'rgb(31 41 55)'
+          }}
+        >
           {allStatusOptions.map((status) => (
             <button
               key={status}
-              onClick={() => updateOrderStatus(order.id, status)}
+              onClick={(e) => handleStatusClick(e, status)}
               className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-700 first:rounded-t-lg last:rounded-b-lg transition-colors flex items-center ${
                 order.status === status ? 'bg-gray-700 text-yellow-400' : 'text-white'
               }`}
+              style={{ backgroundColor: 'transparent' }}
             >
               {getStatusIcon(status)}
               <span className="ml-2 capitalize">
@@ -275,24 +293,24 @@ const StatusDropdown = ({ order }: { order: Order }) => {
   );
 };
 
-// Fix date filtering logic
-const filterByDate = (order: Order, filter: string) => {
-  const orderDate = new Date(order.createdAt);
-  const today = new Date();
-  
-  switch (filter) {
-    case 'today':
-      return orderDate.toDateString() === today.toDateString();
-    case 'week':
-      const weekAgo = new Date(today.setDate(today.getDate() - 7));
-      return orderDate >= weekAgo;
-    case 'month':
-      const monthAgo = new Date(today.setMonth(today.getMonth() - 1));
-      return orderDate >= monthAgo;
-    default:
-      return true;
+  // Fix date filtering logic
+  const filterByDate = (order: Order, filter: string) => {
+    const orderDate = new Date(order.createdAt);
+    const today = new Date();
+    
+    switch (filter) {
+      case 'today':
+        return orderDate.toDateString() === today.toDateString();
+      case 'week':
+        const weekAgo = new Date(today.setDate(today.getDate() - 7));
+        return orderDate >= weekAgo;
+      case 'month':
+        const monthAgo = new Date(today.setMonth(today.getMonth() - 1));
+        return orderDate >= monthAgo;
+      default:
+        return true;
+    }
   }
-}
 
   const filteredOrders = orders.filter(order => {
     const matchesSearch = 
@@ -302,7 +320,7 @@ const filterByDate = (order: Order, filter: string) => {
     
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
     
-    const matchesDate = dateFilter === 'all' || true; // Add date filtering logic if needed
+    const matchesDate = dateFilter === 'all' || filterByDate(order, dateFilter);
     
     return matchesSearch && matchesStatus && matchesDate;
   });
@@ -408,103 +426,100 @@ const filterByDate = (order: Order, filter: string) => {
           </div>
         </div>
 
-       {/* Desktop Table View */}
-<div className="hidden md:block bg-gray-900 rounded-lg overflow-visible"> {/* Changed overflow-hidden to overflow-visible */}
-  <div className="overflow-x-auto">
-    <table className="w-full">
-      <thead className="bg-gray-800">
-        <tr>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-            Order #
-          </th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-            Customer
-          </th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-            Items
-          </th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-            Total
-          </th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-            Status
-          </th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-            Date
-          </th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-            Actions
-          </th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-gray-700">
-        {filteredOrders.map((order) => (
-          <tr key={order.id} className="hover:bg-gray-800/50 relative"> {/* Added relative positioning */}
-            <td className="px-6 py-4 whitespace-nowrap">
-              <div className="text-sm font-medium text-yellow-400">
-                {order.orderNumber}
-              </div>
-            </td>
-            <td className="px-6 py-4 whitespace-nowrap">
-              <div className="text-sm font-medium text-white">
-                {order.customerName}
-              </div>
-              <div className="text-sm text-gray-400">
-                {order.customerPhone}
-              </div>
-            </td>
-            <td className="px-6 py-4 whitespace-nowrap">
-              <div className="text-sm text-gray-300">
-                {getTotalItems(order)} items
-              </div>
-            </td>
-            <td className="px-6 py-4 whitespace-nowrap">
-              <div className="text-sm font-medium text-white">
-                Rs {order.total}
-              </div>
-            </td>
-            <td className="px-6 py-4 whitespace-nowrap">
-              {/* Add relative container for dropdown */}
-              <div className="relative">
-                <StatusDropdown order={order} />
-              </div>
-            </td>
-            <td className="px-6 py-4 whitespace-nowrap">
-              <div className="text-sm text-gray-400">
-                {formatDate(order.createdAt)}
-                </div>
-              </td>
-            <td className="px-6 py-4 whitespace-nowrap">
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => router.push(`/admin/orders/${order.id}`)}
-                  className="p-2 bg-blue-500 rounded-lg hover:bg-blue-600 transition-colors border border-blue-600"
-                  title="View Details"
-                >
-                  <Eye size={16} className="text-white" />
-                </button>
-                <button
-                  onClick={() => window.open(`/api/orders/${order.id}/slip?format=thermal`, '_blank')}
-                  className="p-2 bg-green-500 rounded-lg hover:bg-green-600 transition-colors border border-green-600"
-                  title="Print Slip"
-                >
-                  <Printer size={16} className="text-white" />
-                </button>
-                <button
-                  onClick={() => shareOrderWithRider(order)}
-                  className="p-2 bg-orange-500 rounded-lg hover:bg-orange-600 transition-colors border border-orange-600"
-                  title="Share with Rider"
-                >
-                  <Share2 size={16} className="text-white" />
-                </button>
-              </div>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-</div>
+        {/* Desktop Table View */}
+       <div className="hidden md:block bg-gray-900 rounded-lg relative" style={{ isolation: 'isolate' }}>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-800">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                    Order #
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                    Customer
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                    Items
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                    Total
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                    Date
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-700">
+                {filteredOrders.map((order) => (
+                  <tr key={order.id} className="hover:bg-gray-800/50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-yellow-400">
+                        {order.orderNumber}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-white">
+                        {order.customerName}
+                      </div>
+                      <div className="text-sm text-gray-400">
+                        {order.customerPhone}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-300">
+                        {getTotalItems(order)} items
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-white">
+                        Rs {order.total}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap relative">
+                      <StatusDropdown order={order} />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-400">
+                        {formatDate(order.createdAt)}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => router.push(`/admin/orders/${order.id}`)}
+                          className="p-2 bg-blue-500 rounded-lg hover:bg-blue-600 transition-colors border border-blue-600"
+                          title="View Details"
+                        >
+                          <Eye size={16} className="text-white" />
+                        </button>
+                        <button
+                          onClick={() => window.open(`/api/orders/${order.id}/slip?format=thermal`, '_blank')}
+                          className="p-2 bg-green-500 rounded-lg hover:bg-green-600 transition-colors border border-green-600"
+                          title="Print Slip"
+                        >
+                          <Printer size={16} className="text-white" />
+                        </button>
+                        <button
+                          onClick={() => shareOrderWithRider(order)}
+                          className="p-2 bg-orange-500 rounded-lg hover:bg-orange-600 transition-colors border border-orange-600"
+                          title="Share with Rider"
+                        >
+                          <Share2 size={16} className="text-white" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
         {/* Mobile Card View */}
         <div className="md:hidden space-y-4">
