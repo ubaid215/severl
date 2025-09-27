@@ -196,8 +196,8 @@ export default function AnalyticsPage() {
           
           <div className="flex flex-col sm:flex-row gap-4 mt-4 sm:mt-0">
             {/* Date Range Filter */}
-            <div className="flex items-center space-x-2 bg-gray-900 rounded-lg p-2">
-              <Calendar size={16} className="text-gray-400" />
+            <div className="flex items-center border-2 border-yellow-500 space-x-2 bg-gray-900 rounded-lg p-2">
+              <Calendar size={16} className="text-gray-200" />
               <input
                 type="date"
                 value={dateRange.startDate}
@@ -333,7 +333,7 @@ export default function AnalyticsPage() {
                       </Pie>
                       <Tooltip 
                         contentStyle={{
-                          backgroundColor: '#1F2937',
+                          backgroundColor: '#ffffff',
                           border: 'none',
                           borderRadius: '8px',
                           color: '#FFFFFF'
@@ -402,7 +402,7 @@ export default function AnalyticsPage() {
                       </Pie>
                       <Tooltip 
                         contentStyle={{
-                          backgroundColor: '#1F2937',
+                          backgroundColor: '#ffffff',
                           border: 'none',
                           borderRadius: '8px',
                           color: '#FFFFFF'

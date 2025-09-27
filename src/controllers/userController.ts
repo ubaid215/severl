@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { UserModel } from '@/models/User'
-import jwt from 'jsonwebtoken'
+import jwt, { SignOptions } from "jsonwebtoken"
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d'
+const JWT_SECRET: string = process.env.JWT_SECRET || "your-secret-key"
+const JWT_EXPIRES_IN: string | number = process.env.JWT_EXPIRES_IN || "7d"
+
 
 export class UserController {
   static async login(req: NextRequest) {
@@ -50,15 +51,15 @@ export class UserController {
 
     // Generate JWT token
     console.log("🔐 Generating JWT token for user", { id: user.id, email: user.email });
-    const token = jwt.sign(
-      {
-        userId: user.id,
-        email: user.email,
-        role: user.role,
-      },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN }
-    );
+   const token = jwt.sign(
+  {
+    userId: user.id,
+    email: user.email,
+    role: user.role,
+  },
+  JWT_SECRET,
+  { expiresIn: JWT_EXPIRES_IN } as SignOptions
+);
 
     // Return user data without password
     const userData = await UserModel.findById(user.id);

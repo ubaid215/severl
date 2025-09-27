@@ -3,7 +3,7 @@ import Navigation from "@/components/layout/Navigation";
 import { ReactNode } from "react";
 
 export const metadata = {
-  title: "Customer Area | Severl",
+  title: "Several - The Taste Of Life",
   description: "Customer dashboard and pages",
 };
 
