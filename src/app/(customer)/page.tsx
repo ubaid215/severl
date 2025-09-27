@@ -576,7 +576,7 @@ function Page() {
             {/* View All Deals Button */}
             <div className="text-center mt-6 sm:mt-8">
               <button 
-                onClick={() => window.location.href = '/deals'}
+                onClick={() => window.location.href = '/menu'}
                 className="px-6 sm:px-8 py-2 sm:py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-semibold text-sm sm:text-base flex items-center justify-center mx-auto space-x-2"
               >
                 <Tag className="w-4 h-4" />
