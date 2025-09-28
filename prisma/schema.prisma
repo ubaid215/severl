@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -15,130 +12,82 @@ model User {
   email     String   @unique
   password  String
   name      String
-  phone     String?  @unique  // Add phone field for customer identification
   role      Role     @default(USER)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
-  // Add these relations
-  addresses UserAddress[]
-  orders    Order[]
 
   @@map("users")
 }
 
-// NEW MODEL: User addresses for saving delivery locations
-model UserAddress {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name      String?  // Optional: "Home", "Work", etc.
-  address   String
-  latitude  Float?
-  longitude Float?
-  placeId   String?  // Google Places ID for more accurate results
-  isDefault Boolean  @default(false)
-  lastUsed  DateTime @default(now())
-  createdAt DateTime @default(now())
-
-  @@index([userId])
-  @@map("user_addresses")
-}
-
-// Update Order model with new fields
 model Order {
-  id               String      @id @default(cuid())
-  orderNumber      String      @unique
-  customerName     String
-  customerPhone    String
-  customerEmail    String?
-  deliveryAddress  String
-  latitude         Float?
-  longitude        Float?
-  distance         Float?      // in km
-  subtotal         Float
-  deliveryCharges  Float       @default(0)
-  discount         Float       @default(0)
-  total            Float
-  status           OrderStatus @default(PENDING)
-  paymentStatus    PaymentStatus @default(PENDING)
-  paymentMethod    PaymentMethod @default(CASH_ON_DELIVERY)
-  notes            String?
-  estimatedTime    Int?        // in minutes
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
-  
-  // Add optional user relation for logged-in users
-  userId     String?
-  user       User?     @relation(fields: [userId], references: [id])
-  
-  items      OrderItem[]
+  id              String        @id @default(cuid())
+  orderNumber     String        @unique
+  customerName    String
+  customerPhone   String
+  customerEmail   String?
+  deliveryAddress String
+  latitude        Float?
+  longitude       Float?
+  distance        Float?
+  subtotal        Float
+  deliveryCharges Float         @default(0)
+  discount        Float         @default(0)
+  total           Float
+  status          OrderStatus   @default(PENDING)
+  paymentStatus   PaymentStatus @default(PENDING)
+  paymentMethod   PaymentMethod @default(CASH_ON_DELIVERY)
+  notes           String?
+  estimatedTime   Int?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  items           OrderItem[]
 
   @@map("orders")
 }
 
-// NEW MODEL: Restaurant configuration
-model RestaurantConfig {
-  id            String   @id @default(cuid())
-  name          String
-  address       String
-  latitude      Float
-  longitude     Float
-  phone         String
-  email         String?
-  deliveryRadius Float   @default(10) // in km
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@map("restaurant_config")
-}
-
-
 model Category {
-  id        String   @id @default(cuid())
-  name      String   @unique
+  id        String     @id @default(cuid())
+  name      String     @unique
   image     String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
   foodItems FoodItem[]
 
   @@map("categories")
 }
 
 model FoodItem {
-  id          String   @id @default(cuid())
+  id          String      @id @default(cuid())
   name        String
   description String?
   price       Float
   image       String?
-  isAvailable Boolean  @default(true)
-  category    Category @relation(fields: [categoryId], references: [id])
+  isAvailable Boolean     @default(true)
   categoryId  String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  deletedAt   DateTime?
   cartItems   CartItem[]
+  category    Category    @relation(fields: [categoryId], references: [id])
   orderItems  OrderItem[]
 
   @@map("food_items")
 }
 
 model SpecialDeal {
-  id          String   @id @default(cuid())
-  title       String
-  description String
-  image       String?
-  discount    Float    // percentage or fixed amount
-  discountType DiscountType @default(PERCENTAGE)
+  id             String       @id @default(cuid())
+  title          String
+  description    String
+  image          String?
+  discount       Float
+  discountType   DiscountType @default(PERCENTAGE)
   minOrderAmount Float?
-  isActive    Boolean  @default(true)
-  validFrom   DateTime
-  validTo     DateTime
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isActive       Boolean      @default(true)
+  validFrom      DateTime
+  validTo        DateTime
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@map("special_deals")
 }
@@ -148,7 +97,6 @@ model Cart {
   sessionId String     @unique
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
-  
   items     CartItem[]
 
   @@map("carts")
@@ -156,31 +104,29 @@ model Cart {
 
 model CartItem {
   id         String   @id @default(cuid())
-  cart       Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
   cartId     String
-  foodItem   FoodItem @relation(fields: [foodItemId], references: [id])
   foodItemId String
   quantity   Int      @default(1)
-  price      Float    // price at the time of adding to cart
+  price      Float
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  cart       Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  foodItem   FoodItem @relation(fields: [foodItemId], references: [id])
 
   @@unique([cartId, foodItemId])
   @@map("cart_items")
 }
 
-
-
 model OrderItem {
   id         String   @id @default(cuid())
-  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   orderId    String
-  foodItem   FoodItem @relation(fields: [foodItemId], references: [id])
   foodItemId String
   quantity   Int
-  price      Float    // price at the time of order
-  total      Float    // quantity * price
+  price      Float
+  total      Float
   createdAt  DateTime @default(now())
+  foodItem   FoodItem @relation(fields: [foodItemId], references: [id])
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@map("order_items")
 }

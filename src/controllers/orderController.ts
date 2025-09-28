@@ -86,156 +86,161 @@ function generateOrderNumber(): string {
 export class OrderController {
   // Create a new order
   static async createOrder(req: NextRequest) {
-    try {
-      console.log("📥 Incoming request to createOrder");
+  try {
+    console.log("📥 Incoming request to createOrder");
 
-      const orderData: CreateOrderInput = await req.json();
-      console.log("✅ Parsed orderData:", orderData);
+    const orderData: CreateOrderInput = await req.json();
+    console.log("✅ Parsed orderData:", orderData);
 
-      // Validate required fields
-      if (
-        !orderData.customerName ||
-        !orderData.customerPhone ||
-        !orderData.deliveryAddress
-      ) {
-        console.warn("⚠️ Missing customer details:", {
-          customerName: orderData.customerName,
-          customerPhone: orderData.customerPhone,
-          deliveryAddress: orderData.deliveryAddress,
-        });
-        return NextResponse.json(
-          { error: "Customer name, phone, and delivery address are required" },
-          { status: 400 }
-        );
-      }
-
-      if (!orderData.items || orderData.items.length === 0) {
-        console.warn("⚠️ Empty items array");
-        return NextResponse.json(
-          { error: "Order must contain at least one item" },
-          { status: 400 }
-        );
-      }
-
-      if (!orderData.sessionId) {
-        console.warn("⚠️ Missing sessionId");
-        return NextResponse.json(
-          { error: "Session ID is required" },
-          { status: 400 }
-        );
-      }
-
-      console.log("📍 Validations passed");
-
-      // Calculate distance and delivery charges
-      const restaurantLocation = "Restaurant Address";
-      const distance = calculateDistance(
-        restaurantLocation,
-        orderData.deliveryAddress,
-        orderData.latitude,
-        orderData.longitude
-      );
-      console.log("📏 Distance calculated:", distance);
-
-      const deliveryCharges = calculateDeliveryCharge(distance);
-      console.log("💰 Delivery charges calculated:", deliveryCharges);
-
-      // Get food items with current prices
-      const foodItems = await prisma.foodItem.findMany({
-        where: {
-          id: {
-            in: orderData.items.map((item) => item.foodItemId),
-          },
-          isAvailable: true,
-        },
+    // Validate required fields
+    if (
+      !orderData.customerName ||
+      !orderData.customerPhone ||
+      !orderData.deliveryAddress
+    ) {
+      console.warn("⚠️ Missing customer details:", {
+        customerName: orderData.customerName,
+        customerPhone: orderData.customerPhone,
+        deliveryAddress: orderData.deliveryAddress,
       });
-      console.log("🍔 Retrieved foodItems:", foodItems);
-
-      // Calculate order totals
-      let subtotal = 0;
-      const orderItems = orderData.items.map((item) => {
-        const foodItem = foodItems.find((fi) => fi.id === item.foodItemId);
-        if (!foodItem) {
-          console.error(`❌ Food item with ID ${item.foodItemId} not found`);
-          throw new Error(
-            `Food item with ID ${item.foodItemId} not found or not available`
-          );
-        }
-
-        const itemTotal = foodItem.price * item.quantity;
-        subtotal += itemTotal;
-
-        console.log(
-          `🛒 Item added: ${foodItem.name}, Qty: ${item.quantity}, Total: ${itemTotal}`
-        );
-
-        return {
-          foodItemId: item.foodItemId,
-          quantity: item.quantity,
-          price: foodItem.price,
-          total: itemTotal,
-        };
-      });
-
-      const total = subtotal + deliveryCharges;
-      const orderNumber = generateOrderNumber();
-      console.log("📦 Order summary:", {
-        subtotal,
-        deliveryCharges,
-        total,
-        orderNumber,
-      });
-
-      // Create the order
-      const order = await prisma.order.create({
-        data: {
-          orderNumber,
-          customerName: orderData.customerName,
-          customerPhone: orderData.customerPhone,
-          customerEmail: orderData.customerEmail,
-          deliveryAddress: orderData.deliveryAddress,
-          latitude: orderData.latitude,
-          longitude: orderData.longitude,
-          distance,
-          subtotal,
-          deliveryCharges,
-          total,
-          paymentMethod: orderData.paymentMethod || "CASH_ON_DELIVERY",
-          notes: orderData.notes,
-          items: {
-            create: orderItems,
-          },
-        },
-        include: {
-          items: {
-            include: {
-              foodItem: true,
-            },
-          },
-        },
-      });
-
-      console.log("✅ Order created successfully:", order.id);
-
-      // Clear the cart after successful order creation
-      await CartModel.clearCart(orderData.sessionId);
-      console.log("🗑️ Cart cleared for session:", orderData.sessionId);
-
       return NextResponse.json(
-        {
-          message: "Order created successfully",
-          order,
-        },
-        { status: 201 }
-      );
-    } catch (error) {
-      console.error("❌ Create order error:", error);
-      return NextResponse.json(
-        { error: "Failed to create order" },
-        { status: 500 }
+        { error: "Customer name, phone, and delivery address are required" },
+        { status: 400 }
       );
     }
+
+    if (!orderData.items || orderData.items.length === 0) {
+      console.warn("⚠️ Empty items array");
+      return NextResponse.json(
+        { error: "Order must contain at least one item" },
+        { status: 400 }
+      );
+    }
+
+    if (!orderData.sessionId) {
+      console.warn("⚠️ Missing sessionId");
+      return NextResponse.json(
+        { error: "Session ID is required" },
+        { status: 400 }
+      );
+    }
+
+    console.log("📍 Validations passed");
+
+    // Calculate distance (for tracking purposes, but delivery is free)
+    const restaurantLocation = "Restaurant Address";
+    const distance = calculateDistance(
+      restaurantLocation,
+      orderData.deliveryAddress,
+      orderData.latitude,
+      orderData.longitude
+    );
+    console.log("📏 Distance calculated:", distance);
+
+    // Set delivery charges to 0 (FREE DELIVERY)
+    const deliveryCharges = 0;
+    console.log("🆓 Delivery charges: FREE (", deliveryCharges, ")");
+
+    // Get food items with current prices
+    const foodItems = await prisma.foodItem.findMany({
+      where: {
+        id: {
+          in: orderData.items.map((item) => item.foodItemId),
+        },
+        isAvailable: true,
+      },
+    });
+    console.log("🍔 Retrieved foodItems:", foodItems);
+
+    // Calculate order totals
+    let subtotal = 0;
+    const orderItems = orderData.items.map((item) => {
+      const foodItem = foodItems.find((fi) => fi.id === item.foodItemId);
+      if (!foodItem) {
+        console.error(`❌ Food item with ID ${item.foodItemId} not found`);
+        throw new Error(
+          `Food item with ID ${item.foodItemId} not found or not available`
+        );
+      }
+
+      const itemTotal = foodItem.price * item.quantity;
+      subtotal += itemTotal;
+
+      console.log(
+        `🛒 Item added: ${foodItem.name}, Qty: ${item.quantity}, Total: ${itemTotal}`
+      );
+
+      return {
+        foodItemId: item.foodItemId,
+        quantity: item.quantity,
+        price: foodItem.price,
+        total: itemTotal,
+      };
+    });
+
+    // Total equals subtotal since delivery is free
+    const total = subtotal + deliveryCharges; // deliveryCharges is 0
+    const orderNumber = generateOrderNumber();
+    console.log("📦 Order summary:", {
+      subtotal,
+      deliveryCharges: "FREE",
+      total,
+      orderNumber,
+    });
+
+    // Create the order - ensure we only use fields that exist in schema
+    const order = await prisma.order.create({
+      data: {
+        orderNumber,
+        customerName: orderData.customerName,
+        customerPhone: orderData.customerPhone,
+        customerEmail: orderData.customerEmail || null,
+        deliveryAddress: orderData.deliveryAddress,
+        latitude: orderData.latitude || null,
+        longitude: orderData.longitude || null,
+        distance: distance || null,
+        subtotal,
+        deliveryCharges, // 0 (free delivery)
+        total,
+        status: "PENDING", // Explicitly set status
+        paymentStatus: "PENDING", // Explicitly set payment status
+        paymentMethod: orderData.paymentMethod || "CASH_ON_DELIVERY",
+        notes: orderData.notes || null,
+        // DO NOT include cancelledAt - it doesn't exist in schema
+        items: {
+          create: orderItems,
+        },
+      },
+      include: {
+        items: {
+          include: {
+            foodItem: true,
+          },
+        },
+      },
+    });
+
+    console.log("✅ Order created successfully:", order.id);
+
+    // Clear the cart after successful order creation
+    await CartModel.clearCart(orderData.sessionId);
+    console.log("🗑️ Cart cleared for session:", orderData.sessionId);
+
+    return NextResponse.json(
+      {
+        message: "Order created successfully",
+        order,
+      },
+      { status: 201 }
+    );
+  } catch (error) {
+    console.error("❌ Create order error:", error);
+    return NextResponse.json(
+      { error: "Failed to create order" },
+      { status: 500 }
+    );
   }
+}
 
   // Get all orders (with optional filtering and pagination)
   static async getAllOrders(req: NextRequest) {
@@ -506,68 +511,189 @@ export class OrderController {
         { status: 500 }
       );
     }
+  };
+
+  // Add this method to your OrderController class
+static async getDashboardStats(req: NextRequest) {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Get today's stats
+    const [
+      todayOrders,
+      todayRevenue,
+      totalOrders,
+      totalRevenue,
+      totalCustomers,
+      averageOrderValue,
+      pendingOrders,
+      completedOrders
+    ] = await Promise.all([
+      // Today's orders count
+      prisma.order.count({
+        where: {
+          createdAt: {
+            gte: today,
+            lt: tomorrow
+          }
+        }
+      }),
+      
+      // Today's revenue
+      prisma.order.aggregate({
+        where: {
+          createdAt: {
+            gte: today,
+            lt: tomorrow
+          },
+          status: { not: 'CANCELLED' }
+        },
+        _sum: { total: true }
+      }),
+      
+      // Total orders (all time)
+      prisma.order.count(),
+      
+      // Total revenue (all time)
+      prisma.order.aggregate({
+        where: {
+          status: { not: 'CANCELLED' }
+        },
+        _sum: { total: true }
+      }),
+      
+      // Total unique customers
+      prisma.order.findMany({
+        select: { customerPhone: true },
+        distinct: ['customerPhone']
+      }),
+      
+      // Average order value
+      prisma.order.aggregate({
+        where: {
+          status: { not: 'CANCELLED' }
+        },
+        _avg: { total: true }
+      }),
+      
+      // Pending orders
+      prisma.order.count({
+        where: {
+          status: {
+            in: ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY']
+          }
+        }
+      }),
+      
+      // Completed orders
+      prisma.order.count({
+        where: {
+          status: 'DELIVERED'
+        }
+      })
+    ]);
+
+    const stats = {
+      todayOrders,
+      todayRevenue: todayRevenue._sum.total || 0,
+      totalOrders,
+      totalRevenue: totalRevenue._sum.total || 0,
+      totalCustomers: totalCustomers.length,
+      averageOrderValue: averageOrderValue._avg.total || 0,
+      pendingOrders,
+      completedOrders
+    };
+
+    return NextResponse.json({ stats });
+  } catch (error) {
+    console.error('Get dashboard stats error:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch dashboard stats' },
+      { status: 500 }
+    );
   }
+}
 
   // Get order analytics
-  static async getOrderAnalytics(req: NextRequest) {
-    try {
-      const { searchParams } = new URL(req.url);
-      const startDate = searchParams.get("startDate");
-      const endDate = searchParams.get("endDate");
+static async getOrderAnalytics(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
 
-      const whereClause: any = {};
+    const whereClause: any = {
+      status: { not: 'CANCELLED' } 
+    };
 
-      if (startDate || endDate) {
-        whereClause.createdAt = {};
-        if (startDate) whereClause.createdAt.gte = new Date(startDate);
-        if (endDate) whereClause.createdAt.lte = new Date(endDate);
-      }
-
-      const [
-        totalOrders,
-        totalRevenue,
-        averageOrderValue,
-        ordersByStatus,
-        ordersByPaymentMethod,
-      ] = await Promise.all([
-        prisma.order.count({ where: whereClause }),
-        prisma.order.aggregate({
-          where: whereClause,
-          _sum: { total: true },
-        }),
-        prisma.order.aggregate({
-          where: whereClause,
-          _avg: { total: true },
-        }),
-        prisma.order.groupBy({
-          by: ["status"],
-          where: whereClause,
-          _count: { id: true },
-        }),
-        prisma.order.groupBy({
-          by: ["paymentMethod"],
-          where: whereClause,
-          _count: { id: true },
-        }),
-      ]);
-
-      const analytics = {
-        totalOrders,
-        totalRevenue: totalRevenue._sum.total || 0,
-        averageOrderValue: averageOrderValue._avg.total || 0,
-        ordersByStatus,
-        ordersByPaymentMethod,
-      };
-
-      return NextResponse.json({ analytics });
-    } catch (error) {
-      console.error("Get order analytics error:", error);
-      return NextResponse.json(
-        { error: "Failed to fetch order analytics" },
-        { status: 500 }
-      );
+    if (startDate || endDate) {
+      whereClause.createdAt = {};
+      if (startDate) whereClause.createdAt.gte = new Date(startDate);
+      if (endDate) whereClause.createdAt.lte = new Date(endDate);
     }
+
+    console.log('📊 Analytics query with filters:', whereClause);
+
+    const [
+      totalOrders,
+      totalRevenue,
+      averageOrderValue,
+      ordersByStatus,
+      ordersByPaymentMethod,
+    ] = await Promise.all([
+      prisma.order.count({ where: whereClause }),
+      
+      prisma.order.aggregate({
+        where: whereClause,
+        _sum: { total: true },
+      }),
+      
+      prisma.order.aggregate({
+        where: whereClause,
+        _avg: { total: true },
+      }),
+      
+      // Don't exclude cancelled from status breakdown (for complete picture)
+      prisma.order.groupBy({
+        by: ["status"],
+        where: startDate || endDate ? {
+          createdAt: whereClause.createdAt
+        } : {}, // Only apply date filter for status breakdown
+        _count: { id: true },
+      }),
+      
+      prisma.order.groupBy({
+        by: ["paymentMethod"],
+        where: whereClause,
+        _count: { id: true },
+      }),
+    ]);
+
+    const analytics = {
+      totalOrders,
+      totalRevenue: totalRevenue._sum.total || 0,
+      averageOrderValue: averageOrderValue._avg.total || 0,
+      ordersByStatus,
+      ordersByPaymentMethod,
+    };
+
+    console.log('📈 Analytics generated:', {
+      totalOrders: analytics.totalOrders,
+      totalRevenue: analytics.totalRevenue,
+      averageOrderValue: analytics.averageOrderValue
+    });
+
+    return NextResponse.json({ analytics });
+  } catch (error) {
+    console.error("Get order analytics error:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch order analytics" },
+      { status: 500 }
+    );
   }
+}
 
   // Get orders by status count
   static async getOrdersByStatus() {
@@ -587,52 +713,59 @@ export class OrderController {
     }
   }
 
-  // Get revenue report (simplified version)
-  static async getRevenueReport(req: NextRequest) {
-    try {
-      const { searchParams } = new URL(req.url);
-      const startDate = searchParams.get("startDate");
-      const endDate = searchParams.get("endDate");
+  // Get revenue report 
+static async getRevenueReport(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
 
-      const whereClause: any = {};
+    const whereClause: any = {
+      status: { not: 'CANCELLED' } // ✅ Exclude cancelled orders
+    };
 
-      if (startDate || endDate) {
-        whereClause.createdAt = {};
-        if (startDate) whereClause.createdAt.gte = new Date(startDate);
-        if (endDate) whereClause.createdAt.lte = new Date(endDate);
-      }
-
-      const revenueData = await prisma.order.findMany({
-        where: whereClause,
-        select: {
-          createdAt: true,
-          total: true,
-        },
-        orderBy: { createdAt: "asc" },
-      });
-
-      // Group data by date
-      const groupedData = revenueData.reduce((acc: any, order) => {
-        const date = order.createdAt.toISOString().split("T")[0];
-        if (!acc[date]) {
-          acc[date] = { date, revenue: 0, orders: 0 };
-        }
-        acc[date].revenue += order.total;
-        acc[date].orders += 1;
-        return acc;
-      }, {});
-
-      const report = Object.values(groupedData);
-
-      return NextResponse.json({ report });
-    } catch (error) {
-      console.error("Get revenue report error:", error);
-      return NextResponse.json(
-        { error: "Failed to fetch revenue report" },
-        { status: 500 }
-      );
+    if (startDate || endDate) {
+      whereClause.createdAt = {};
+      if (startDate) whereClause.createdAt.gte = new Date(startDate);
+      if (endDate) whereClause.createdAt.lte = new Date(endDate);
     }
+
+    const revenueData = await prisma.order.findMany({
+      where: whereClause,
+      select: {
+        createdAt: true,
+        total: true,
+        status: true, // Include status for debugging
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    console.log(`📊 Revenue report: Found ${revenueData.length} orders for analytics`);
+
+    // Group data by date
+    const groupedData = revenueData.reduce((acc: any, order) => {
+      const date = order.createdAt.toISOString().split("T")[0];
+      if (!acc[date]) {
+        acc[date] = { date, revenue: 0, orders: 0 };
+      }
+      acc[date].revenue += order.total;
+      acc[date].orders += 1;
+      return acc;
+    }, {});
+
+    const report = Object.values(groupedData);
+    
+    console.log(`📈 Revenue report generated: ${report.length} days of data`);
+
+    return NextResponse.json({ report });
+  } catch (error) {
+    console.error("Get revenue report error:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch revenue report" },
+      { status: 500 }
+    );
   }
+}
 
   // Generate order slip for download and WhatsApp sharing
   static async generateOrderSlip(

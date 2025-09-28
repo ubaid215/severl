@@ -1,7 +1,7 @@
 // app/cart/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, Plus, Minus, Trash2, Clock, ShoppingBag } from "lucide-react";
@@ -27,12 +27,32 @@ interface CartSummary {
   itemCount: number;
 }
 
+// Custom hook for debounced API calls
+function useDebounce<T extends (...args: any[]) => any>(
+  callback: T,
+  delay: number
+): T {
+  const timeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
+  
+  return useCallback((...args: Parameters<T>) => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    timeoutRef.current = setTimeout(() => callback(...args), delay);
+  }, [callback, delay]) as T;
+}
+
 export default function CartPage() {
   const [cartData, setCartData] = useState<CartSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
-  const [updatingItem, setUpdatingItem] = useState<string | null>(null);
+  const [updatingItems, setUpdatingItems] = useState<Set<string>>(new Set());
   const [sessionId, setSessionId] = useState<string | null>(null);
+  
+  // Cache for pending operations to prevent redundant API calls
+  const pendingOperations = useRef(new Map<string, Promise<any>>());
+  const lastFetchTime = useRef(0);
+  const FETCH_COOLDOWN = 1000; // Minimum 1 second between fetches
 
   // Initialize everything on client only
   useEffect(() => {
@@ -46,96 +66,182 @@ export default function CartPage() {
     setSessionId(existingSessionId);
   }, []);
 
-  // Fetch cart data
-  const fetchCart = async () => {
+  // Optimized fetch cart with caching and cooldown
+  const fetchCart = useCallback(async (force = false) => {
     if (!sessionId || !mounted) return;
+    
+    const now = Date.now();
+    if (!force && now - lastFetchTime.current < FETCH_COOLDOWN) {
+      return; // Skip if called too recently
+    }
+    
+    // Check if there's already a pending fetch
+    if (pendingOperations.current.has('fetch')) {
+      return pendingOperations.current.get('fetch');
+    }
     
     try {
       setLoading(true);
-      const response = await fetch(`/api/cart?sessionId=${sessionId}`);
-      const data = await response.json();
+      lastFetchTime.current = now;
       
-      if (data.success) {
-        setCartData(data.data);
-      } else {
-        setCartData(null);
-      }
+      const fetchPromise = fetch(`/api/cart?sessionId=${sessionId}`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            setCartData(data.data);
+          } else {
+            setCartData(null);
+          }
+          return data;
+        })
+        .finally(() => {
+          pendingOperations.current.delete('fetch');
+        });
+      
+      pendingOperations.current.set('fetch', fetchPromise);
+      await fetchPromise;
     } catch (error) {
       console.error("Failed to fetch cart:", error);
       setCartData(null);
+      pendingOperations.current.delete('fetch');
     } finally {
       setLoading(false);
     }
-  };
+  }, [sessionId, mounted]);
 
-  // Update item quantity - FIXED VERSION
-  const updateQuantity = async (itemId: string, newQuantity: number) => {
+  // Debounced fetch to prevent excessive API calls
+  const debouncedFetchCart = useDebounce(fetchCart, 500);
+
+  // Optimistic UI updates with batch operations
+  const updateCartItemOptimistically = useCallback((itemId: string, newQuantity: number) => {
+    if (!cartData) return;
+    
+    setCartData(prevData => {
+      if (!prevData) return null;
+      
+      const updatedItems = prevData.items.map(item => {
+        if (item.id === itemId) {
+          return { ...item, quantity: Math.max(0, newQuantity) };
+        }
+        return item;
+      }).filter(item => item.quantity > 0); // Remove items with 0 quantity
+      
+      const subtotal = updatedItems.reduce((sum, item) => 
+        sum + (item.foodItem.price * item.quantity), 0
+      );
+      
+      return {
+        ...prevData,
+        items: updatedItems,
+        subtotal,
+        total: subtotal + prevData.deliveryCharges,
+        itemCount: updatedItems.reduce((sum, item) => sum + item.quantity, 0)
+      };
+    });
+  }, [cartData]);
+
+  // Batch update operations to reduce API calls
+  const batchUpdateQueue = useRef(new Map<string, number>());
+  const processBatchUpdates = useCallback(async () => {
+    if (batchUpdateQueue.current.size === 0 || !sessionId) return;
+    
+    const updates = Array.from(batchUpdateQueue.current.entries());
+    batchUpdateQueue.current.clear();
+    
+    try {
+      // Process all updates in parallel
+      await Promise.all(
+        updates.map(async ([itemId, quantity]) => {
+          const operationKey = `update_${itemId}`;
+          
+          if (pendingOperations.current.has(operationKey)) {
+            return;
+          }
+          
+          const updatePromise = (async () => {
+            if (quantity <= 0) {
+              // Remove item
+              const response = await fetch(`/api/cart/${itemId}`, {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ sessionId }),
+              });
+              return response.json();
+            } else {
+              // Update quantity
+              const response = await fetch(`/api/cart/${itemId}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ quantity, sessionId }),
+              });
+              return response.json();
+            }
+          })().finally(() => {
+            pendingOperations.current.delete(operationKey);
+            setUpdatingItems(prev => {
+              const next = new Set(prev);
+              next.delete(itemId);
+              return next;
+            });
+          });
+          
+          pendingOperations.current.set(operationKey, updatePromise);
+          return updatePromise;
+        })
+      );
+      
+      // Fetch fresh data after all updates
+      setTimeout(() => fetchCart(true), 100);
+      window.dispatchEvent(new CustomEvent('cartUpdated'));
+      
+    } catch (error) {
+      console.error("Failed to process batch updates:", error);
+      // Revert optimistic updates by fetching fresh data
+      fetchCart(true);
+    }
+  }, [sessionId, fetchCart]);
+
+  // Debounced batch processor
+  const debouncedBatchProcess = useDebounce(processBatchUpdates, 800);
+
+  // Update item quantity with optimistic UI and batching
+  const updateQuantity = useCallback(async (itemId: string, newQuantity: number) => {
     if (newQuantity < 0 || !mounted || !sessionId) return;
     
-    try {
-      setUpdatingItem(itemId);
-      
-      const response = await fetch(`/api/cart/${itemId}`, {
-        method: "PUT",
-        headers: { 
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ 
-          quantity: newQuantity,
-          sessionId: sessionId 
-        }),
-      });
+    setUpdatingItems(prev => new Set(prev).add(itemId));
+    
+    // Optimistic update
+    updateCartItemOptimistically(itemId, newQuantity);
+    
+    // Add to batch queue
+    batchUpdateQueue.current.set(itemId, newQuantity);
+    
+    // Process batch after delay
+    debouncedBatchProcess();
+  }, [mounted, sessionId, updateCartItemOptimistically, debouncedBatchProcess]);
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      
-      if (result.success) {
-        await fetchCart();
-        window.dispatchEvent(new CustomEvent('cartUpdated'));
-      } else {
-        console.error("Failed to update quantity:", result.error);
-      }
-    } catch (error) {
-      console.error("Failed to update item:", error);
-    } finally {
-      setUpdatingItem(null);
-    }
-  };
-
-  // Remove item from cart - FIXED VERSION
-  const removeItem = async (itemId: string) => {
+  // Remove item from cart with optimistic update
+  const removeItem = useCallback(async (itemId: string) => {
     if (!mounted || !sessionId) return;
     
-    try {
-      setUpdatingItem(itemId);
-      
-      const response = await fetch(`/api/cart/${itemId}`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ sessionId }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      await fetchCart();
-      window.dispatchEvent(new CustomEvent('cartUpdated'));
-    } catch (error) {
-      console.error("Failed to remove item:", error);
-    } finally {
-      setUpdatingItem(null);
-    }
-  };
+    setUpdatingItems(prev => new Set(prev).add(itemId));
+    
+    // Optimistic update
+    updateCartItemOptimistically(itemId, 0);
+    
+    // Add to batch queue
+    batchUpdateQueue.current.set(itemId, 0);
+    
+    // Process batch after delay
+    debouncedBatchProcess();
+  }, [mounted, sessionId, updateCartItemOptimistically, debouncedBatchProcess]);
 
   // Clear entire cart
-  const clearCart = async () => {
+  const clearCart = useCallback(async () => {
     if (!sessionId || !mounted) return;
+    
+    // Clear any pending batch operations
+    batchUpdateQueue.current.clear();
     
     try {
       setLoading(true);
@@ -149,20 +255,42 @@ export default function CartPage() {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      await fetchCart();
+      // Optimistically clear the cart
+      setCartData(null);
+      
+      // Fetch to confirm
+      setTimeout(() => fetchCart(true), 100);
       window.dispatchEvent(new CustomEvent('cartUpdated'));
     } catch (error) {
       console.error("Failed to clear cart:", error);
+      // Revert by fetching fresh data
+      fetchCart(true);
     } finally {
       setLoading(false);
     }
-  };
+  }, [sessionId, mounted, fetchCart]);
 
+  // Initial cart fetch
   useEffect(() => {
     if (sessionId && mounted) {
       fetchCart();
     }
-  }, [sessionId, mounted]);
+  }, [sessionId, mounted, fetchCart]);
+
+  // Listen for cart updates from other components
+  useEffect(() => {
+    const handleCartUpdate = () => debouncedFetchCart();
+    window.addEventListener('cartUpdated', handleCartUpdate);
+    return () => window.removeEventListener('cartUpdated', handleCartUpdate);
+  }, [debouncedFetchCart]);
+
+  // Cleanup pending operations on unmount
+  useEffect(() => {
+    return () => {
+      pendingOperations.current.clear();
+      batchUpdateQueue.current.clear();
+    };
+  }, []);
 
   // Show loading state during SSR and initial client mount
   if (!mounted || loading) {
@@ -276,19 +404,19 @@ export default function CartPage() {
                         <div className="flex items-center bg-black/50 rounded-lg border border-yellow-500/30">
                           <button
                             onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                            disabled={updatingItem === item.id || item.quantity <= 1}
+                            disabled={updatingItems.has(item.id) || item.quantity <= 1}
                             className="p-2 hover:bg-yellow-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           >
                             <Minus className="w-4 h-4 text-yellow-500" />
                           </button>
                           
                           <span className="px-4 py-2 text-white font-semibold min-w-[3rem] text-center">
-                            {updatingItem === item.id ? "..." : item.quantity}
+                            {updatingItems.has(item.id) ? "..." : item.quantity}
                           </span>
                           
                           <button
                             onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                            disabled={updatingItem === item.id}
+                            disabled={updatingItems.has(item.id)}
                             className="p-2 hover:bg-yellow-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           >
                             <Plus className="w-4 h-4 text-yellow-500" />
@@ -297,7 +425,7 @@ export default function CartPage() {
                         
                         <button
                           onClick={() => removeItem(item.id)}
-                          disabled={updatingItem === item.id}
+                          disabled={updatingItems.has(item.id)}
                           className="p-2 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors rounded-lg"
                           title="Remove item"
                         >
@@ -314,7 +442,7 @@ export default function CartPage() {
                     </div>
 
                     {/* Loading Overlay */}
-                    {updatingItem === item.id && (
+                    {updatingItems.has(item.id) && (
                       <div className="absolute inset-0 bg-black/20 rounded-lg flex items-center justify-center">
                         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-yellow-500"></div>
                       </div>
@@ -335,8 +463,6 @@ export default function CartPage() {
                   <span>Subtotal ({getItemCount()} items):</span>
                   <span>Rs {getSubtotal().toFixed(2)}</span>
                 </div>
-                
-                
                 
                 <hr className="border-yellow-500/20" />
                 
@@ -361,7 +487,6 @@ export default function CartPage() {
                   Continue Shopping
                 </Link>
               </div>
-
             </div>
           </div>
         </div>

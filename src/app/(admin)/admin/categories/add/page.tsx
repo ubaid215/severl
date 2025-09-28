@@ -9,19 +9,21 @@ export default function AddCategoryPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [imagePreview, setImagePreview] = useState<string>('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
-    image: '',
   });
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setSelectedFile(file);
+      
+      // Create preview
       const reader = new FileReader();
       reader.onloadend = () => {
         setImagePreview(reader.result as string);
-        setFormData(prev => ({ ...prev, image: reader.result as string }));
       };
       reader.readAsDataURL(file);
     }
@@ -29,7 +31,7 @@ export default function AddCategoryPage() {
 
   const removeImage = () => {
     setImagePreview('');
-    setFormData(prev => ({ ...prev, image: '' }));
+    setSelectedFile(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -45,13 +47,22 @@ export default function AddCategoryPage() {
       }
 
       const token = localStorage.getItem('admin_token');
+      
+      // Use FormData instead of JSON
+      const formDataToSend = new FormData();
+      formDataToSend.append('name', formData.name);
+      
+      if (selectedFile) {
+        formDataToSend.append('image', selectedFile);
+      }
+
       const response = await fetch('/api/categories', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
+          // Don't set Content-Type - let browser set it with boundary
         },
-        body: JSON.stringify(formData),
+        body: formDataToSend,
       });
 
       const data = await response.json();
@@ -91,7 +102,7 @@ export default function AddCategoryPage() {
         )}
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="bg-gray-900 p-6 rounded-lg">
+        <form onSubmit={handleSubmit} className="bg-gray-900 p-6 rounded-lg" encType="multipart/form-data">
           {/* Image Upload */}
           <div className="mb-6">
             <label className="block text-sm font-medium mb-2">Category Image</label>
@@ -114,6 +125,7 @@ export default function AddCategoryPage() {
               <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-700 rounded-lg cursor-pointer bg-gray-800 hover:border-yellow-500 transition-colors">
                 <Upload size={32} className="text-gray-400 mb-2" />
                 <span className="text-gray-400">Click to upload image</span>
+                <span className="text-gray-500 text-sm mt-1">PNG, JPG, JPEG up to 5MB</span>
                 <input
                   type="file"
                   accept="image/*"

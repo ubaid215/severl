@@ -204,7 +204,7 @@ ${order.notes ? `📝 SPECIAL NOTES:\n${order.notes}` : ''}
       case 'PENDING': return <Clock className="text-yellow-500" size={16} />;
       case 'CONFIRMED': return <CheckCircle className="text-blue-500" size={16} />;
       case 'PREPARING': return <Package className="text-orange-500" size={16} />;
-      case 'READY': return <CheckCircle className="text-green-500" size={16} />;
+      case 'READY': return <CheckCircle className="text-sky-500" size={16} />;
       case 'OUT_FOR_DELIVERY': return <Truck className="text-purple-500" size={16} />;
       case 'DELIVERED': return <CheckCircle className="text-green-600" size={16} />;
       case 'CANCELLED': return <XCircle className="text-red-500" size={16} />;
@@ -217,7 +217,7 @@ ${order.notes ? `📝 SPECIAL NOTES:\n${order.notes}` : ''}
       case 'PENDING': return 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30';
       case 'CONFIRMED': return 'bg-blue-500/20 text-blue-300 border-blue-500/30';
       case 'PREPARING': return 'bg-orange-500/20 text-orange-300 border-orange-500/30';
-      case 'READY': return 'bg-green-500/20 text-green-300 border-green-500/30';
+      case 'READY': return 'bg-sky-500/80 text-sky-300 border-sky-500/30';
       case 'OUT_FOR_DELIVERY': return 'bg-purple-500/20 text-purple-300 border-purple-500/30';
       case 'DELIVERED': return 'bg-green-600/20 text-green-400 border-green-600/30';
       case 'CANCELLED': return 'bg-red-500/20 text-red-300 border-red-500/30';

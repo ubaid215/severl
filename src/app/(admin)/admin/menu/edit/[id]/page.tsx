@@ -30,12 +30,13 @@ export default function EditFoodItemPage() {
   const [error, setError] = useState('');
   const [categories, setCategories] = useState<Category[]>([]);
   const [imagePreview, setImagePreview] = useState<string>('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [hasExistingImage, setHasExistingImage] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     price: '',
-    image: '',
     categoryId: '',
     isAvailable: true,
   });
@@ -63,12 +64,12 @@ export default function EditFoodItemPage() {
           name: item.name,
           description: item.description || '',
           price: item.price.toString(),
-          image: item.image || '',
           categoryId: item.categoryId,
           isAvailable: item.isAvailable,
         });
         if (item.image) {
           setImagePreview(item.image);
+          setHasExistingImage(true);
         }
       }
     } catch (error) {
@@ -99,10 +100,25 @@ export default function EditFoodItemPage() {
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setSelectedFile(file);
+      
+      // Validate file size client-side
+      if (file.size > 5 * 1024 * 1024) {
+        setError('Image size must be less than 5MB');
+        return;
+      }
+      
+      // Validate file type client-side
+      const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      if (!validTypes.includes(file.type)) {
+        setError('Please select a valid image (JPEG, PNG, or WebP)');
+        return;
+      }
+      
+      // Create preview
       const reader = new FileReader();
       reader.onloadend = () => {
         setImagePreview(reader.result as string);
-        setFormData(prev => ({ ...prev, image: reader.result as string }));
       };
       reader.readAsDataURL(file);
     }
@@ -110,7 +126,9 @@ export default function EditFoodItemPage() {
 
   const removeImage = () => {
     setImagePreview('');
-    setFormData(prev => ({ ...prev, image: '' }));
+    setSelectedFile(null);
+    setHasExistingImage(false);
+    setError('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -125,23 +143,39 @@ export default function EditFoodItemPage() {
         return;
       }
 
-      if (parseFloat(formData.price) <= 0) {
-        setError('Price must be greater than 0');
+      const priceValue = parseFloat(formData.price);
+      if (priceValue <= 0 || isNaN(priceValue)) {
+        setError('Price must be a valid number greater than 0');
         setSaving(false);
         return;
       }
 
       const token = localStorage.getItem('admin_token');
+      
+      // Use FormData instead of JSON
+      const formDataToSend = new FormData();
+      formDataToSend.append('name', formData.name);
+      formDataToSend.append('description', formData.description);
+      formDataToSend.append('price', formData.price);
+      formDataToSend.append('categoryId', formData.categoryId);
+      formDataToSend.append('isAvailable', formData.isAvailable.toString());
+      
+      if (selectedFile) {
+        formDataToSend.append('image', selectedFile);
+      }
+      
+      // If image was removed (no preview and no new file selected)
+      if (hasExistingImage && !imagePreview && !selectedFile) {
+        formDataToSend.append('removeImage', 'true');
+      }
+
       const response = await fetch(`/api/food-items/${id}`, {
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
+          // Don't set Content-Type - let browser set it with boundary
         },
-        body: JSON.stringify({
-          ...formData,
-          price: parseFloat(formData.price),
-        }),
+        body: formDataToSend,
       });
 
       const data = await response.json();
@@ -152,7 +186,7 @@ export default function EditFoodItemPage() {
         setError(data.error || 'Failed to update food item');
       }
     } catch (err) {
-      setError('An error occurred while updating the food item');
+      setError('Network error occurred. Please check your connection and try again.');
       console.error(err);
     } finally {
       setSaving(false);
@@ -189,7 +223,7 @@ export default function EditFoodItemPage() {
         )}
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="bg-gray-900 p-6 rounded-lg">
+        <form onSubmit={handleSubmit} className="bg-gray-900 p-6 rounded-lg" encType="multipart/form-data">
           {/* Image Upload */}
           <div className="mb-6">
             <label className="block text-sm font-medium mb-2">Item Image</label>
@@ -203,7 +237,7 @@ export default function EditFoodItemPage() {
                 <button
                   type="button"
                   onClick={removeImage}
-                  className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full"
+                  className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 transition-colors"
                 >
                   <X size={16} />
                 </button>
@@ -212,13 +246,19 @@ export default function EditFoodItemPage() {
               <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-700 rounded-lg cursor-pointer bg-gray-800 hover:border-yellow-500 transition-colors">
                 <Upload size={32} className="text-gray-400 mb-2" />
                 <span className="text-gray-400">Click to upload image</span>
+                <span className="text-gray-500 text-sm mt-1">PNG, JPG, JPEG, WebP up to 5MB</span>
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg, image/jpg, image/png, image/webp"
                   onChange={handleImageChange}
                   className="hidden"
                 />
               </label>
+            )}
+            {hasExistingImage && imagePreview && (
+              <p className="text-sm text-gray-400 mt-2">
+                Click the X to remove the current image
+              </p>
             )}
           </div>
 
@@ -229,7 +269,8 @@ export default function EditFoodItemPage() {
               type="text"
               value={formData.name}
               onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-yellow-500"
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors"
+              placeholder="e.g., Margherita Pizza, Chicken Burger"
               required
             />
           </div>
@@ -241,7 +282,8 @@ export default function EditFoodItemPage() {
               value={formData.description}
               onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
               rows={3}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-yellow-500"
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors"
+              placeholder="Describe the food item, ingredients, etc."
             />
           </div>
 
@@ -252,10 +294,11 @@ export default function EditFoodItemPage() {
               <input
                 type="number"
                 step="0.01"
-                min="0"
+                min="0.01"
                 value={formData.price}
                 onChange={(e) => setFormData(prev => ({ ...prev, price: e.target.value }))}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors"
+                placeholder="0.00"
                 required
               />
             </div>
@@ -264,7 +307,7 @@ export default function EditFoodItemPage() {
               <select
                 value={formData.categoryId}
                 onChange={(e) => setFormData(prev => ({ ...prev, categoryId: e.target.value }))}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors"
                 required
               >
                 <option value="">Select Category</option>
@@ -284,7 +327,7 @@ export default function EditFoodItemPage() {
                 type="checkbox"
                 checked={formData.isAvailable}
                 onChange={(e) => setFormData(prev => ({ ...prev, isAvailable: e.target.checked }))}
-                className="mr-2 rounded bg-gray-800 border-gray-700 text-yellow-500 focus:ring-yellow-500"
+                className="mr-2 rounded bg-gray-800 border-gray-700 text-yellow-500 focus:ring-yellow-500 focus:ring-2"
               />
               <span className="text-sm">Available for ordering</span>
             </label>
