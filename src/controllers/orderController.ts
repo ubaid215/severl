@@ -990,9 +990,9 @@ Thank you for your order! 🎉
   private static generateThermalSlip(order: any) {
     const slip = `
 ================================
-         RESTAURANT NAME
-         123 Main Street
-        Phone: +91-XXXXXXXXXX
+         Several
+         P-562/A Opposite Govt. Nusrat Fateh Ali Khan Hospital, Peoples Colony No 2, Faisalabad
+        Phone: +923290039757
 ================================
 
 ORDER #: ${order.orderNumber}
@@ -1058,9 +1058,9 @@ Generated: ${new Date().toLocaleString("en-IN")}
   private static generateThermal58mm(order: any) {
     const slip = `
 ================================
-       RESTAURANT NAME
-       123 Main Street
-      Phone: +91-XXXXXXXXXX
+       Several
+P-562/A Opposite Govt. Nusrat Fateh Ali Khan Hospital, Peoples Colony No 2, Faisalabad
+      Phone: +923290039757
 ================================
 
 ORDER #: ${order.orderNumber}
@@ -1074,7 +1074,7 @@ ${order.customerName}
 ${order.customerPhone}
 ${
   order.deliveryAddress.length > 30
-    ? order.deliveryAddress.substring(0, 27) + "..."
+    ? order.deliveryAddress.substring(0, 77) + "..."
     : order.deliveryAddress
 }
 
@@ -1138,10 +1138,10 @@ ${order.notes ? `Notes:\n${order.notes}\n` : ""}
       commands.centerAlign +
       commands.bold +
       commands.doubleHeight +
-      "RESTAURANT NAME\n" +
+      "Several\n" +
       commands.normal +
-      "123 Main Street\n" +
-      "Phone: +91-XXXXXXXXXX\n" +
+      "P-562/A Opposite Govt. Nusrat Fateh Ali Khan Hospital, Peoples Colony No 2, Faisalabad\n" +
+      "Phone: +923290039757\n" +
       "================================\n\n" +
       commands.leftAlign +
       commands.bold +
