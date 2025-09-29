@@ -13,7 +13,8 @@ import {
   ChevronLeft, 
   ChevronRight,
   User,
-  ClipboardCheckIcon
+  ClipboardCheckIcon,
+  DollarSignIcon
 } from 'lucide-react'
 
 interface User {
@@ -54,12 +55,12 @@ export default function AdminSideBar({ user }: AdminSideBarProps) {
       icon: FolderOpen
     },
     { 
-      label: 'Food Items', 
+      label: 'Food Menu', 
       href: '/admin/menu', 
       icon: UtensilsCrossed
     },
     { 
-      label: 'Orders', 
+      label: 'All Orders', 
       href: '/admin/orders', 
       icon: ClipboardList
     },
@@ -67,6 +68,11 @@ export default function AdminSideBar({ user }: AdminSideBarProps) {
       label: 'Create Orders', 
       href: '/admin/orders/create', 
       icon: ClipboardCheckIcon
+    },
+    { 
+      label: 'Income', 
+      href: '/admin/revenue', 
+      icon: DollarSignIcon
     },
     // { 
     //   label: 'Special Deals', 
