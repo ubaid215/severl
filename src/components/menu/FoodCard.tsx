@@ -1,4 +1,4 @@
-"use client"
+"use client";
 import Image from "next/image";
 import { ShoppingCart, Clock, Tag, Flame } from "lucide-react";
 import { getSessionId } from "@/utils/session";
@@ -26,15 +26,13 @@ export default function FoodCard({ foodItem }: FoodCardProps) {
 
   // Function to check if this item is part of deals category
   const isDealItem = (): boolean => {
-    const dealKeywords = ['top deals', 'special deals', 'deals', 'offer', 'discount', 'promo', 'sale',];
-    const categoryName = foodItem.category?.name?.toLowerCase() || '';
-    const itemName = foodItem.name?.toLowerCase() || '';
-    const itemDescription = foodItem.description?.toLowerCase() || '';
-    
-    return dealKeywords.some(keyword => 
-      categoryName.includes(keyword) || 
-      itemName.includes(keyword) || 
-      itemDescription.includes(keyword)
+    const dealKeywords = ["top deals", "special deals", "deals", "offer", "discount", "promo", "sale"];
+    const categoryName = foodItem.category?.name?.toLowerCase() || "";
+    const itemName = foodItem.name?.toLowerCase() || "";
+    const itemDescription = foodItem.description?.toLowerCase() || "";
+
+    return dealKeywords.some(
+      (keyword) => categoryName.includes(keyword) || itemName.includes(keyword) || itemDescription.includes(keyword)
     );
   };
 
@@ -60,7 +58,6 @@ export default function FoodCard({ foodItem }: FoodCardProps) {
       const data = await res.json();
       if (res.ok) {
         console.log("✅ Added to cart:", data);
-        // Optionally trigger a toast or update cart context here
       } else {
         console.error("❌ Failed to add to cart:", data.error);
       }
@@ -72,12 +69,14 @@ export default function FoodCard({ foodItem }: FoodCardProps) {
   };
 
   return (
-    <div className={`rounded-xl shadow-lg overflow-hidden cursor-pointer border-2 hover:shadow-md transition-all duration-300 flex flex-col relative ${
-      isDeals 
-        ? 'bg-gray-900 border-red-700/50 hover:border-red-500 hover:scale-105' 
-        : 'bg-[#101828] border-yellow-500/20 hover:border-yellow-500/40'
-    }`}>
-      
+    <div
+      className={`rounded-xl shadow-lg overflow-hidden cursor-pointer border-2 flex flex-col relative
+        transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.04] hover:shadow-2xl
+        ${isDeals
+          ? "bg-gray-900 border-red-700/50 hover:border-red-500"
+          : "bg-[#101828] border-yellow-500/20 hover:border-yellow-500/40"
+        }`}
+    >
       {/* Deal Badge */}
       {isDeals && (
         <div className="absolute top-2 left-2 z-20 bg-red-500 text-white px-2 py-1 rounded-full text-xs font-bold animate-pulse flex items-center space-x-1">
@@ -87,26 +86,26 @@ export default function FoodCard({ foodItem }: FoodCardProps) {
       )}
 
       {/* Food Image */}
-      <div className="relative h-40 w-full">
+      <div className="relative h-40 w-full overflow-hidden">
         {foodItem.image ? (
           <Image
             src={foodItem.image}
             alt={foodItem.name}
             fill
-            className="object-cover hover:scale-110 transition-transform duration-300"
+            className="object-cover transition-transform duration-500 ease-in-out group-hover:scale-110"
           />
         ) : (
           <div className="w-full h-full bg-black flex items-center justify-center">
-            <Clock className={`w-12 h-12 ${isDeals ? 'text-red-500' : 'text-yellow-500'}`} />
+            <Clock className={`w-12 h-12 ${isDeals ? "text-red-500" : "text-yellow-500"}`} />
           </div>
         )}
 
         {/* Price Tag */}
-        <div className={`absolute top-2 right-2 px-3 py-1 rounded-full text-sm font-bold shadow-lg ${
-          isDeals 
-            ? 'bg-red-500 text-white' 
-            : 'bg-yellow-500 text-black'
-        }`}>
+        <div
+          className={`absolute top-2 right-2 px-3 py-1 rounded-full text-sm font-bold shadow-lg ${
+            isDeals ? "bg-red-500 text-white" : "bg-yellow-500 text-black"
+          }`}
+        >
           Rs {foodItem.price.toFixed(2)}
         </div>
 
@@ -119,39 +118,39 @@ export default function FoodCard({ foodItem }: FoodCardProps) {
 
       {/* Food Details */}
       <div className="p-4 flex flex-col flex-grow">
-        <h3 className={`text-lg font-bold mb-3 transition-colors ${
-          isDeals 
-            ? 'text-white hover:text-red-400' 
-            : 'text-white hover:text-yellow-400'
-        }`}>
+        <h3
+          className={`text-lg font-bold mb-3 transition-colors ${
+            isDeals ? "text-white hover:text-red-400" : "text-white hover:text-yellow-400"
+          }`}
+        >
           {foodItem.name}
         </h3>
 
-        <p className="text-gray-400 text-sm mb-4 line-clamp-2 flex-grow">
-          {foodItem.description}
-        </p>
+        <p className="text-gray-400 text-sm mb-4 line-clamp-2 flex-grow">{foodItem.description}</p>
 
         {/* Category Badge */}
         <div className="mb-4">
-          <span className={`inline-flex items-center text-xs px-2 py-1 rounded border ${
-            isDeals 
-              ? 'text-red-400 bg-red-900/30 border-red-700' 
-              : 'text-yellow-400 bg-yellow-900/20 border-yellow-700/50'
-          }`}>
+          <span
+            className={`inline-flex items-center text-xs px-2 py-1 rounded border ${
+              isDeals
+                ? "text-red-400 bg-red-900/30 border-red-700"
+                : "text-yellow-400 bg-yellow-900/20 border-yellow-700/50"
+            }`}
+          >
             {isDeals && <Tag className="w-3 h-3 mr-1" />}
-            {foodItem.category?.name || 'Uncategorized'}
+            {foodItem.category?.name || "Uncategorized"}
           </span>
         </div>
 
-        {/* Add to Cart Button - Small with "Cart" text on mobile, full button on desktop */}
+        {/* Add to Cart Buttons */}
         <div className="flex justify-center mt-auto">
-          {/* Mobile - Small button with "Cart" text */}
+          {/* Mobile */}
           <button
             onClick={handleAddToCart}
             disabled={!foodItem.isAvailable || loading}
             className={`sm:hidden flex items-center justify-center
               px-3 py-2 rounded-lg text-xs font-semibold
-              transition-all duration-200
+              transition-all duration-300 ease-in-out
               ${
                 foodItem.isAvailable
                   ? isDeals
@@ -164,14 +163,13 @@ export default function FoodCard({ foodItem }: FoodCardProps) {
             <span>{loading ? "Adding..." : foodItem.isAvailable ? "Cart" : "N/A"}</span>
           </button>
 
-          {/* Desktop - Full Button with Text */}
+          {/* Desktop */}
           <button
             onClick={handleAddToCart}
             disabled={!foodItem.isAvailable || loading}
             className={`hidden sm:flex items-center justify-center
-              px-6 py-2.5 
-              rounded-lg text-base font-semibold
-              transition-all duration-200 min-w-[140px]
+              px-6 py-2.5 rounded-lg text-base font-semibold
+              transition-all duration-300 ease-in-out min-w-[140px]
               ${
                 foodItem.isAvailable
                   ? isDeals
