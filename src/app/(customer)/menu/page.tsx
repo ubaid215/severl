@@ -1,4 +1,3 @@
-// app/menu/page.tsx
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -32,8 +31,18 @@ export default function MenuPage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [foodItems, setFoodItems] = useState<FoodItem[]>([])
   const [loading, setLoading] = useState(true)
-  const searchParams = useSearchParams()
-  const activeCategory = searchParams.get('category')
+  const [searchParamsReady, setSearchParamsReady] = useState(false)
+  
+  // This will prevent the error during static generation
+  let activeCategory: string | null = null
+  try {
+    const searchParams = useSearchParams()
+    activeCategory = searchParams.get('category')
+    if (!searchParamsReady) setSearchParamsReady(true)
+  } catch (error) {
+    // During static generation, useSearchParams will throw an error
+    // We'll handle this gracefully
+  }
 
   useEffect(() => {
     const fetchData = async () => {

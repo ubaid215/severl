@@ -1,10 +1,7 @@
 import { NextRequest } from 'next/server';
 import { OrderController } from '@/controllers/orderController';
 
-interface Params {
-  params: { orderNumber: string };
-}
-
-export async function GET(req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, context: { params: Promise<{ orderNumber: string }> }) {
+  const params = await context.params; // ✅ Await the Promise
   return OrderController.getOrderByOrderNumber(req, { params });
 }

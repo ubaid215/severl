@@ -84,6 +84,9 @@ function generateOrderNumber(): string {
 }
 
 export class OrderController {
+  static calculateDelivery(req: NextRequest) {
+    throw new Error("Method not implemented.");
+  }
   // Create a new order
   static async createOrder(req: NextRequest) {
   try {

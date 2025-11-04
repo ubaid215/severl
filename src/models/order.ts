@@ -1,5 +1,5 @@
 import { prisma } from '../app/lib/prisma'
-import { OrderStatus, PaymentStatus } from '@prisma/client'
+import { OrderStatus, PaymentStatus, PaymentMethod } from '@prisma/client'
 
 export interface CreateOrderData {
   customerName: string
@@ -10,7 +10,7 @@ export interface CreateOrderData {
   longitude?: number
   distance?: number
   sessionId: string
-  paymentMethod?: string
+  paymentMethod?: PaymentMethod // ✅ Use the actual enum type
   notes?: string
   dealId?: string
 }
@@ -90,7 +90,7 @@ export class OrderModel {
 
     // Create order in transaction
     return await prisma.$transaction(async (tx) => {
-      // Create order
+      // Create order with proper paymentMethod
       const order = await tx.order.create({
         data: {
           ...orderData,
@@ -99,6 +99,7 @@ export class OrderModel {
           deliveryCharges,
           discount,
           total,
+          paymentMethod: orderData.paymentMethod || PaymentMethod.CASH_ON_DELIVERY, // ✅ Use default from schema
         }
       })
 
