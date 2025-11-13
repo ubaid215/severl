@@ -1,10 +1,8 @@
 "use client";
 
 import HeroCarousel from '@/components/common/HeroCarousel'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { Utensils, Star, Tag, ChevronLeft, ChevronRight } from 'lucide-react'
-import { Swiper, SwiperSlide } from 'swiper/react'
-import { Navigation, FreeMode, Autoplay } from 'swiper/modules'
 import FoodCard from '@/components/menu/FoodCard'
 
 // Type for Category
@@ -33,6 +31,11 @@ function Page() {
   const [categories, setCategories] = useState<Category[]>([])
   const [foodItems, setFoodItems] = useState<FoodItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [featuredScrollPosition, setFeaturedScrollPosition] = useState(0)
+  const [dealsScrollPosition, setDealsScrollPosition] = useState(0)
+  
+  const featuredContainerRef = useRef<HTMLDivElement>(null)
+  const dealsContainerRef = useRef<HTMLDivElement>(null)
 
   // Fetch data from backend
   useEffect(() => {
@@ -71,23 +74,67 @@ function Page() {
     );
   };
 
-  // Filter out deal items for featured section
+  // Filter out deal items for featured section - MAX 6 ITEMS
   const getFeaturedItems = () => {
     if (!foodItems || !Array.isArray(foodItems)) return []
     
     const availableItems = foodItems.filter(item => item && item.isAvailable && !isDealItem(item))
     const shuffled = [...availableItems].sort(() => 0.5 - Math.random())
-    return shuffled.slice(0, 12)
+    return shuffled.slice(0, 6) // Limit to maximum 6 items
   }
 
-  // Filter deal items only
+  // Filter deal items only - MAX 6 ITEMS
   const getDealItems = () => {
     if (!foodItems || !Array.isArray(foodItems)) return []
-    return foodItems.filter(item => item && item.isAvailable && isDealItem(item))
+    const deals = foodItems.filter(item => item && item.isAvailable && isDealItem(item))
+    return deals.slice(0, 6) // Limit to maximum 6 items
   }
 
   const featuredItems = getFeaturedItems()
   const dealItems = getDealItems()
+
+  // Scroll functions for featured items
+  const scrollFeatured = (direction: 'left' | 'right') => {
+    if (!featuredContainerRef.current) return
+    
+    const container = featuredContainerRef.current
+    const scrollAmount = 400
+    const newPosition = direction === 'left' 
+      ? Math.max(0, featuredScrollPosition - scrollAmount)
+      : featuredScrollPosition + scrollAmount
+    
+    container.scrollTo({
+      left: newPosition,
+      behavior: 'smooth'
+    })
+    setFeaturedScrollPosition(newPosition)
+  }
+
+  // Scroll functions for deal items
+  const scrollDeals = (direction: 'left' | 'right') => {
+    if (!dealsContainerRef.current) return
+    
+    const container = dealsContainerRef.current
+    const scrollAmount = 400
+    const newPosition = direction === 'left' 
+      ? Math.max(0, dealsScrollPosition - scrollAmount)
+      : dealsScrollPosition + scrollAmount
+    
+    container.scrollTo({
+      left: newPosition,
+      behavior: 'smooth'
+    })
+    setDealsScrollPosition(newPosition)
+  }
+
+  // Check if scroll buttons should be visible
+  const canScrollFeaturedLeft = featuredScrollPosition > 0
+  const canScrollFeaturedRight = featuredContainerRef.current && 
+    featuredScrollPosition < featuredContainerRef.current.scrollWidth - featuredContainerRef.current.clientWidth
+
+  const canScrollDealsLeft = dealsScrollPosition > 0
+  const canScrollDealsRight = dealsContainerRef.current && 
+    dealsScrollPosition < dealsContainerRef.current.scrollWidth - dealsContainerRef.current.clientWidth
 
   if (loading) {
     return (
@@ -98,7 +145,7 @@ function Page() {
   }
 
   return (
-    <div className="w-full min-h-screen bg-black text-white">
+    <div className="w-full min-h-screen bg-black text-white overflow-x-hidden">
       {/* Hero Section */}
       <HeroCarousel />
 
@@ -162,72 +209,47 @@ function Page() {
             </p>
           </div>
 
-          {/* Enhanced Swiper with Multiple Items */}
+          {/* Manual Scroll Container */}
           <div className="relative">
-            <Swiper
-              modules={[Navigation, FreeMode, Autoplay]}
-              spaceBetween={16}
-              slidesPerView={1.2}
-              centeredSlides={false}
-              navigation={{
-                nextEl: '.swiper-button-next-featured',
-                prevEl: '.swiper-button-prev-featured',
-              }}
-              autoplay={{
-                delay: 4000,
-                disableOnInteraction: false,
-                pauseOnMouseEnter: true,
-              }}
-              freeMode={{
-                enabled: true,
-                momentum: true,
-                momentumBounce: false,
-                sticky: true,
-                minimumVelocity: 0.01
-              }}
-              grabCursor={true}
-              breakpoints={{
-                480: {
-                  slidesPerView: 1.8,
-                  spaceBetween: 20,
-                },
-                640: {
-                  slidesPerView: 2.2,
-                  spaceBetween: 24,
-                },
-                768: {
-                  slidesPerView: 2.5,
-                  spaceBetween: 24,
-                },
-                1024: {
-                  slidesPerView: 3,
-                  spaceBetween: 28,
-                  freeMode: false
-                },
-                1280: {
-                  slidesPerView: 4,
-                  spaceBetween: 32,
-                  freeMode: false
-                }
-              }}
-              className="featured-swiper pb-2"
+            {/* Scroll Container */}
+            <div 
+              ref={featuredContainerRef}
+              className="flex gap-4 sm:gap-6 overflow-x-auto scrollbar-hide scroll-smooth py-4 px-2"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
               {featuredItems.map((item) => (
-                <SwiperSlide key={item?.id} className="py-2">
-                  <div className="h-full transform transition-transform duration-300 hover:scale-[1.02]">
-                    <FoodCard foodItem={item} />
-                  </div>
-                </SwiperSlide>
+                <div 
+                  key={item?.id} 
+                  className="flex-shrink-0 w-[280px] sm:w-[300px] md:w-[320px] transform transition-all duration-300 hover:scale-[1.02]"
+                >
+                  <FoodCard foodItem={item} />
+                </div>
               ))}
-            </Swiper>
+            </div>
 
             {/* Custom Navigation Buttons */}
-            <div className="swiper-button-prev-featured absolute left-0 sm:left-2 top-1/2 -translate-y-1/2 z-10 bg-black/80 hover:bg-black text-yellow-500 hover:text-yellow-400 p-2 sm:p-3 rounded-full shadow-2xl border border-yellow-500/20 transition-all duration-300 hover:scale-110 cursor-pointer hidden sm:flex items-center justify-center">
-              <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
-            </div>
-            <div className="swiper-button-next-featured absolute right-0 sm:right-2 top-1/2 -translate-y-1/2 z-10 bg-black/80 hover:bg-black text-yellow-500 hover:text-yellow-400 p-2 sm:p-3 rounded-full shadow-2xl border border-yellow-500/20 transition-all duration-300 hover:scale-110 cursor-pointer hidden sm:flex items-center justify-center">
-              <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
-            </div>
+            {featuredItems.length > 1 && (
+              <>
+                <button
+                  onClick={() => scrollFeatured('left')}
+                  disabled={!canScrollFeaturedLeft}
+                  className={`absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-10 bg-black/80 hover:bg-black text-yellow-500 hover:text-yellow-400 p-3 sm:p-4 rounded-full shadow-2xl border border-yellow-500/20 transition-all duration-300 hover:scale-110 cursor-pointer flex items-center justify-center ${
+                    !canScrollFeaturedLeft ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                >
+                  <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+                </button>
+                <button
+                  onClick={() => scrollFeatured('right')}
+                  disabled={!canScrollFeaturedRight}
+                  className={`absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-10 bg-black/80 hover:bg-black text-yellow-500 hover:text-yellow-400 p-3 sm:p-4 rounded-full shadow-2xl border border-yellow-500/20 transition-all duration-300 hover:scale-110 cursor-pointer flex items-center justify-center ${
+                    !canScrollFeaturedRight ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                >
+                  <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
+                </button>
+              </>
+            )}
           </div>
 
           {/* View All Button */}
@@ -261,71 +283,47 @@ function Page() {
             </p>
           </div>
 
-          {/* Enhanced Swiper for Deals */}
+          {/* Manual Scroll Container for Deals */}
           <div className="relative">
-            <Swiper
-              modules={[Navigation, FreeMode, Autoplay]}
-              spaceBetween={16}
-              slidesPerView={1.3}
-              centeredSlides={false}
-              navigation={{
-                nextEl: '.swiper-button-next-deals',
-                prevEl: '.swiper-button-prev-deals',
-              }}
-              autoplay={{
-                delay: 3500,
-                disableOnInteraction: false,
-                pauseOnMouseEnter: true,
-              }}
-              freeMode={{
-                enabled: true,
-                momentum: true,
-                momentumBounce: false,
-                sticky: true
-              }}
-              grabCursor={true}
-              breakpoints={{
-                480: {
-                  slidesPerView: 1.6,
-                  spaceBetween: 20,
-                },
-                640: {
-                  slidesPerView: 2,
-                  spaceBetween: 24,
-                },
-                768: {
-                  slidesPerView: 2.3,
-                  spaceBetween: 24,
-                },
-                1024: {
-                  slidesPerView: 3,
-                  spaceBetween: 28,
-                  freeMode: false
-                },
-                1280: {
-                  slidesPerView: 4,
-                  spaceBetween: 32,
-                  freeMode: false
-                }
-              }}
-              className="deals-swiper pb-2"
+            {/* Scroll Container */}
+            <div 
+              ref={dealsContainerRef}
+              className="flex gap-4 sm:gap-6 overflow-x-auto scrollbar-hide scroll-smooth py-4 px-2"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
               {dealItems.map((item) => (
-                <SwiperSlide key={item?.id} className="py-2">
-                  <div className="h-full transform transition-transform duration-300 hover:scale-[1.02]">
-                    <FoodCard foodItem={item} />
-                  </div>
-                </SwiperSlide>
+                <div 
+                  key={item?.id} 
+                  className="flex-shrink-0 w-[280px] sm:w-[300px] md:w-[320px] transform transition-all duration-300 hover:scale-[1.02]"
+                >
+                  <FoodCard foodItem={item} />
+                </div>
               ))}
-            </Swiper>
+            </div>
 
             {/* Custom Navigation Buttons */}
-            <div className="swiper-button-prev-deals absolute left-0 sm:left-2 top-1/2 -translate-y-1/2 z-10 bg-black/80 hover:bg-black text-red-500 hover:text-red-400 p-2 sm:p-3 rounded-full shadow-2xl border border-red-500/20 transition-all duration-300 hover:scale-110 cursor-pointer hidden sm:flex items-center justify-center">
-              <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
-            </div>
-            <div className="swiper-button-next-deals absolute right-0 sm:right-2 top-1/2 -translate-y-1/2 z-10 bg-black/80 hover:bg-black text-red-500 hover:text-red-400 p-2 sm:p-3 rounded-full shadow-2xl border border-red-500/20 transition-all duration-300 hover:scale-110 cursor-pointer hidden sm:flex items-center justify-center">
-              <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
-            </div>
+            {dealItems.length > 1 && (
+              <>
+                <button
+                  onClick={() => scrollDeals('left')}
+                  disabled={!canScrollDealsLeft}
+                  className={`absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-10 bg-black/80 hover:bg-black text-red-500 hover:text-red-400 p-3 sm:p-4 rounded-full shadow-2xl border border-red-500/20 transition-all duration-300 hover:scale-110 cursor-pointer flex items-center justify-center ${
+                    !canScrollDealsLeft ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                >
+                  <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+                </button>
+                <button
+                  onClick={() => scrollDeals('right')}
+                  disabled={!canScrollDealsRight}
+                  className={`absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-10 bg-black/80 hover:bg-black text-red-500 hover:text-red-400 p-3 sm:p-4 rounded-full shadow-2xl border border-red-500/20 transition-all duration-300 hover:scale-110 cursor-pointer flex items-center justify-center ${
+                    !canScrollDealsRight ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                >
+                  <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
+                </button>
+              </>
+            )}
           </div>
 
           {/* View All Deals Button */}
@@ -343,46 +341,12 @@ function Page() {
 
       {/* Custom Styles */}
       <style jsx global>{`
-        .featured-swiper,
-        .deals-swiper {
-          overflow: visible !important;
+        .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
         }
-
-        .featured-swiper .swiper-slide,
-        .deals-swiper .swiper-slide {
-          transition: transform 0.3s ease;
-        }
-
-        .featured-swiper .swiper-slide:hover,
-        .deals-swiper .swiper-slide:hover {
-          transform: translateY(-8px);
-        }
-
-        .swiper-button-prev-featured,
-        .swiper-button-next-featured,
-        .swiper-button-prev-deals,
-        .swiper-button-next-deals {
-          backdrop-filter: blur(10px);
-        }
-
-        @media (max-width: 640px) {
-          .featured-swiper,
-          .deals-swiper {
-            padding: 0 4px;
-          }
-          
-          .featured-swiper .swiper-slide,
-          .deals-swiper .swiper-slide {
-            opacity: 0.6;
-            transition: opacity 0.3s ease;
-          }
-          
-          .featured-swiper .swiper-slide-active,
-          .deals-swiper .swiper-slide-active,
-          .featured-swiper .swiper-slide-next,
-          .deals-swiper .swiper-slide-next {
-            opacity: 1;
-          }
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none;
         }
       `}</style>
     </div>
