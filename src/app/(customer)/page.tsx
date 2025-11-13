@@ -2,10 +2,10 @@
 
 import HeroCarousel from '@/components/common/HeroCarousel'
 import React, { useEffect, useState } from 'react'
-import { Utensils, Star, Clock, Tag, ChevronLeft, ChevronRight, Plus, ShoppingCart, ShoppingCartIcon } from 'lucide-react'
-// Import Swiper React components
+import { Utensils, Star, Tag, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Swiper, SwiperSlide } from 'swiper/react'
-import { Navigation, Pagination, FreeMode, Autoplay } from 'swiper/modules'
+import { Navigation, FreeMode, Autoplay } from 'swiper/modules'
+import FoodCard from '@/components/menu/FoodCard'
 
 // Type for Category
 interface Category {
@@ -29,55 +29,24 @@ interface FoodItem {
   }
 }
 
-// Type for Special Deal
-interface SpecialDeal {
-  id: string
-  title: string
-  description: string
-  image?: string
-  discount: number
-  discountType: 'PERCENTAGE' | 'FIXED'
-  originalPrice?: number
-  finalPrice?: number
-  minOrderAmount?: number
-  validFrom: string
-  validTo: string
-  isActive: boolean
-}
-
-// Cart Item Type
-interface CartItem {
-  id: string
-  name: string
-  price: number
-  quantity: number
-  image?: string
-}
-
 function Page() {
   const [categories, setCategories] = useState<Category[]>([])
   const [foodItems, setFoodItems] = useState<FoodItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [cart, setCart] = useState<CartItem[]>([])
 
   // Fetch data from backend
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true)
-        const [categoriesRes, foodItemsRes, dealsRes] = await Promise.all([
+        const [categoriesRes, foodItemsRes] = await Promise.all([
           fetch('/api/categories'),
-          fetch('/api/food-items'),
-          fetch('/api/special-deals?active=true')
+          fetch('/api/food-items')
         ])
 
         const categoriesData = await categoriesRes.json()
         const foodItemsData = await foodItemsRes.json()
-        const dealsData = await dealsRes.json()
 
-        console.log('Deals API Response:', dealsData) // Debug log
-
-        // Safe data setting with fallbacks
         setCategories(categoriesData?.data || categoriesData || [])
         setFoodItems(foodItemsData?.data || foodItemsData || [])
       } catch (error) {
@@ -90,85 +59,35 @@ function Page() {
     fetchData()
   }, [])
 
-  // Safe function to get random food items
-  const getRandomFoodItems = () => {
+  // Function to check if item is a deal item
+  const isDealItem = (item: FoodItem): boolean => {
+    const dealKeywords = ["top deals", "special deals", "deals", "offer", "discount", "promo", "sale"];
+    const categoryName = item.category?.name?.toLowerCase() || "";
+    const itemName = item.name?.toLowerCase() || "";
+    const itemDescription = item.description?.toLowerCase() || "";
+
+    return dealKeywords.some(
+      (keyword) => categoryName.includes(keyword) || itemName.includes(keyword) || itemDescription.includes(keyword)
+    );
+  };
+
+  // Filter out deal items for featured section
+  const getFeaturedItems = () => {
     if (!foodItems || !Array.isArray(foodItems)) return []
     
-    const availableItems = foodItems.filter(item => item && item.isAvailable)
+    const availableItems = foodItems.filter(item => item && item.isAvailable && !isDealItem(item))
     const shuffled = [...availableItems].sort(() => 0.5 - Math.random())
-    return shuffled.slice(0, 12) // Increased to 12 for better variety
+    return shuffled.slice(0, 12)
   }
 
-  const randomFoodItems = getRandomFoodItems()
-
-  // Cart functions
-  const addToCart = (item: FoodItem) => {
-    setCart(prevCart => {
-      const existingItem = prevCart.find(cartItem => cartItem.id === item.id)
-      if (existingItem) {
-        return prevCart.map(cartItem =>
-          cartItem.id === item.id
-            ? { ...cartItem, quantity: cartItem.quantity + 1 }
-            : cartItem
-        )
-      } else {
-        return [...prevCart, {
-          id: item.id,
-          name: item.name,
-          price: item.price,
-          quantity: 1,
-          image: item.image
-        }]
-      }
-    })
+  // Filter deal items only
+  const getDealItems = () => {
+    if (!foodItems || !Array.isArray(foodItems)) return []
+    return foodItems.filter(item => item && item.isAvailable && isDealItem(item))
   }
 
-  const getTotalCartItems = () => {
-    return cart.reduce((total, item) => total + item.quantity, 0)
-  }
-
-  // Safe price formatting
-  const formatPrice = (price: number | undefined | null): string => {
-    if (price === undefined || price === null || isNaN(price)) {
-      return '0.00'
-    }
-    return price.toFixed(2)
-  }
-
-  // Safe date formatting
-  const formatDate = (dateString: string | undefined): string => {
-    if (!dateString) return 'Invalid date'
-    
-    try {
-      return new Date(dateString).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric'
-      })
-    } catch (error) {
-      return 'Invalid date'
-    }
-  }
-
-  // Safe time remaining calculation
-  const getTimeRemaining = (validTo: string | undefined): string => {
-    if (!validTo) return 'Invalid date'
-    
-    try {
-      const now = new Date()
-      const end = new Date(validTo)
-      const diff = end.getTime() - now.getTime()
-      
-      if (diff <= 0) return 'Expired'
-      
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
-      
-      if (days > 0) return `${days}d ${hours}h left`
-      return `${hours}h left`
-    } catch (error) {
-      return 'Invalid date'
-    }
-  }
+  const featuredItems = getFeaturedItems()
+  const dealItems = getDealItems()
 
   if (loading) {
     return (
@@ -180,469 +99,289 @@ function Page() {
 
   return (
     <div className="w-full min-h-screen bg-black text-white">
-      {/* Fixed Cart Icon for Mobile */}
-      {getTotalCartItems() > 0 && (
-        <div className="fixed top-4 right-4 z-50 md:hidden">
-          <button className="bg-yellow-500 text-black p-3 rounded-full shadow-lg flex items-center justify-center relative">
-            <ShoppingCart className="w-5 h-5" />
-            <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center">
-              {getTotalCartItems()}
-            </span>
-          </button>
-        </div>
-      )}
-
       {/* Hero Section */}
       <HeroCarousel />
 
       {/* Explore Our Menus Section */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
-        <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-center mb-8 sm:mb-10 text-yellow-400">
-          Explore Menus
-        </h2>
+        <div className="text-center mb-8 sm:mb-10">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-yellow-400 mb-3 sm:mb-4">
+            Explore Menus
+          </h2>
+          <p className="text-gray-300 text-sm sm:text-base md:text-lg max-w-2xl mx-auto px-4">
+            Discover our delicious selection of categories and find your perfect meal
+          </p>
+        </div>
 
-        {/* Categories Grid - Responsive */}
-        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6 lg:gap-8">
+        {/* Categories Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 md:gap-6">
           {categories.map((category) => (
             <div
               key={category?.id}
-              className="bg-gray-900 rounded-lg sm:rounded-2xl shadow-lg overflow-hidden group hover:scale-105 transition-transform duration-300 cursor-pointer border border-gray-700 hover:border-yellow-500"
+              className="group cursor-pointer transform transition-all duration-300 hover:scale-105"
             >
-              {/* Category Image */}
-              {category?.image ? (
-                <img
-                  src={category.image}
-                  alt={category.name}
-                  className="w-full h-24 sm:h-32 md:h-40 lg:h-48 object-cover group-hover:opacity-90 transition"
-                />
-              ) : (
-                <div className="w-full h-24 sm:h-32 md:h-40 lg:h-48 bg-gray-800 flex items-center justify-center">
-                  <Utensils className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 lg:w-12 lg:h-12 text-gray-600" />
+              <div className="relative bg-gradient-to-br from-gray-900 to-black rounded-xl sm:rounded-2xl p-3 sm:p-4 border border-gray-800 hover:border-yellow-500 transition-colors h-full flex flex-col items-center text-center">
+                {/* Category Image */}
+                <div className="relative w-12 h-12 sm:w-16 sm:h-16 md:w-20 md:h-20 mb-2 sm:mb-3 rounded-full bg-gradient-to-br from-yellow-500/20 to-yellow-600/10 flex items-center justify-center overflow-hidden">
+                  {category?.image ? (
+                    <img
+                      src={category.image}
+                      alt={category.name}
+                      className="w-full h-full object-cover rounded-full"
+                    />
+                  ) : (
+                    <Utensils className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-500" />
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent rounded-full" />
                 </div>
-              )}
 
-              {/* Category Name */}
-              <div className="p-2 sm:p-3 md:p-4 flex flex-col items-center justify-center bg-gray-900">
-                <h3 className="text-xs sm:text-sm md:text-base lg:text-lg font-semibold text-white group-hover:text-yellow-500 transition-colors text-center line-clamp-2">
+                {/* Category Name */}
+                <h3 className="text-xs sm:text-sm font-semibold text-white group-hover:text-yellow-400 transition-colors line-clamp-2">
                   {category?.name || 'Unnamed Category'}
                 </h3>
+                <div className="mt-1 sm:mt-2 w-6 sm:w-8 h-0.5 bg-yellow-500 transform scale-0 group-hover:scale-100 transition-transform duration-300" />
               </div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Top Menu Items Section - Swiper Slider */}
-      {randomFoodItems.length > 0 && (
+      {/* Featured Items Section - Excludes Deal Items */}
+      {featuredItems.length > 0 && (
         <section className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
-          <div className="flex items-center justify-between mb-6 sm:mb-8">
-            <div className="flex items-center space-x-3">
-              <Utensils className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-500" />
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-yellow-400">
-                Our Top Items
-              </h2>
+          {/* Section Header */}
+          <div className="text-center mb-8 sm:mb-12">
+            <div className="inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-yellow-500/10 mb-3 sm:mb-4">
+              <Star className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-500" />
             </div>
-            
-            {/* Desktop Cart Button */}
-            {getTotalCartItems() > 0 && (
-              <div className="hidden md:flex">
-                <button className="bg-yellow-500 text-black px-4 py-2 rounded-lg hover:bg-yellow-600 transition-colors flex items-center space-x-2">
-                  <ShoppingCart className="w-5 h-5" />
-                  <span>Cart ({getTotalCartItems()})</span>
-                </button>
-              </div>
-            )}
+            <h2 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-2 sm:mb-4">
+              Featured Items
+            </h2>
+            <p className="text-gray-400 text-xs sm:text-sm md:text-lg max-w-2xl mx-auto px-4">
+              Handpicked favorites that our customers love
+            </p>
           </div>
 
-          {/* Swiper Container */}
+          {/* Enhanced Swiper with Multiple Items */}
           <div className="relative">
             <Swiper
-              modules={[Navigation, Pagination, FreeMode, Autoplay]}
+              modules={[Navigation, FreeMode, Autoplay]}
               spaceBetween={16}
-              slidesPerView={1}
+              slidesPerView={1.2}
+              centeredSlides={false}
               navigation={{
-                nextEl: '.swiper-button-next-custom',
-                prevEl: '.swiper-button-prev-custom',
-              }}
-              pagination={{ 
-                clickable: true,
-                bulletClass: 'swiper-pagination-bullet custom-bullet',
-                bulletActiveClass: 'swiper-pagination-bullet-active custom-bullet-active',
+                nextEl: '.swiper-button-next-featured',
+                prevEl: '.swiper-button-prev-featured',
               }}
               autoplay={{
                 delay: 4000,
                 disableOnInteraction: false,
                 pauseOnMouseEnter: true,
               }}
-              freeMode={true}
+              freeMode={{
+                enabled: true,
+                momentum: true,
+                momentumBounce: false,
+                sticky: true,
+                minimumVelocity: 0.01
+              }}
               grabCursor={true}
               breakpoints={{
-                640: {
-                  slidesPerView: 2,
+                480: {
+                  slidesPerView: 1.8,
                   spaceBetween: 20,
+                },
+                640: {
+                  slidesPerView: 2.2,
+                  spaceBetween: 24,
+                },
+                768: {
+                  slidesPerView: 2.5,
+                  spaceBetween: 24,
                 },
                 1024: {
                   slidesPerView: 3,
-                  spaceBetween: 24,
+                  spaceBetween: 28,
+                  freeMode: false
                 },
                 1280: {
                   slidesPerView: 4,
-                  spaceBetween: 30,
+                  spaceBetween: 32,
+                  freeMode: false
                 }
               }}
-              className="food-items-swiper"
+              className="featured-swiper pb-2"
             >
-              {randomFoodItems.map((item) => (
-                <SwiperSlide key={item?.id}>
-                  <div className="bg-gray-900 rounded-lg sm:rounded-2xl overflow-hidden group hover:scale-105 transition-all duration-300 cursor-pointer border border-gray-700 hover:border-yellow-500 h-full">
-                    {/* Food Image */}
-                    {item?.image ? (
-                      <div className="relative h-32 sm:h-40 md:h-48 overflow-hidden bg-gray-800">
-                        <img
-                          src={item.image}
-                          alt={item.name}
-                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                          loading="lazy"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = 'none';
-                            const parent = target.parentElement;
-                            if (parent) {
-                              parent.innerHTML = `
-                                <div class="w-full h-full bg-gray-800 flex items-center justify-center">
-                                  <svg class="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 text-gray-600" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M8.5 11.5L11 14l4.5-4.5L18 12v6H6v-6l2.5-2.5z"/>
-                                    <circle cx="15.5" cy="9.5" r="1.5"/>
-                                    <rect x="2" y="4" width="20" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
-                                  </svg>
-                                </div>
-                              `;
-                            }
-                          }}
-                        />
-                        <div className="absolute top-2 right-2 bg-yellow-500 text-black px-2 py-1 rounded-full text-xs sm:text-sm font-bold">
-                          Rs {formatPrice(item?.price)}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="relative h-32 sm:h-40 md:h-48 bg-gray-800 flex items-center justify-center">
-                        <Utensils className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 text-gray-600" />
-                        <div className="absolute top-2 right-2 bg-yellow-500 text-black px-2 py-1 rounded-full text-xs sm:text-sm font-bold">
-                          Rs {formatPrice(item?.price)}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Food Content */}
-                    <div className="p-3 sm:p-4 flex flex-col flex-grow bg-gray-900">
-                      <h3 className="font-semibold text-white mb-2 text-sm sm:text-base line-clamp-1 group-hover:text-yellow-500">
-                        {item?.name || 'Unnamed Item'}
-                      </h3>
-                      <p className="text-gray-400 text-xs sm:text-sm mb-3 line-clamp-2 flex-grow">
-                        {item?.description || 'No description available'}
-                      </p>
-                      
-                      {/* Category and Add to Cart */}
-                      <div className="flex justify-between items-center mt-auto">
-                        <span className="text-xs text-gray-500 bg-gray-800 px-2 py-1 rounded">
-                          {item?.category?.name || 'Uncategorized'}
-                        </span>
-                        
-                        {/* Mobile Add to Cart (Icon Only) */}
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            addToCart(item);
-                          }}
-                          className="sm:hidden bg-yellow-500 text-black p-2 rounded-full hover:bg-yellow-600 transition-colors flex items-center justify-center"
-                          aria-label="Add to cart"
-                        >
-                          <ShoppingCartIcon className="w-4 h-4" />
-                        </button>
-                        
-                        {/* Desktop Add to Cart (With Text) */}
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            addToCart(item);
-                          }}
-                          className="hidden sm:flex bg-yellow-500 text-black px-3 py-1 rounded-lg hover:bg-yellow-600 transition-colors items-center space-x-1 text-xs sm:text-sm font-medium"
-                        >
-                          <ShoppingCartIcon className="w-3 h-3 sm:w-4 sm:h-4" />
-                          <span>Add to Cart</span>
-                        </button>
-                      </div>
-                    </div>
+              {featuredItems.map((item) => (
+                <SwiperSlide key={item?.id} className="py-2">
+                  <div className="h-full transform transition-transform duration-300 hover:scale-[1.02]">
+                    <FoodCard foodItem={item} />
                   </div>
                 </SwiperSlide>
               ))}
             </Swiper>
 
             {/* Custom Navigation Buttons */}
-            <div className="swiper-button-prev-custom absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-yellow-500 hover:bg-yellow-600 text-black p-2 sm:p-3 rounded-full shadow-lg transition-colors -ml-4 sm:-ml-6 cursor-pointer">
+            <div className="swiper-button-prev-featured absolute left-0 sm:left-2 top-1/2 -translate-y-1/2 z-10 bg-black/80 hover:bg-black text-yellow-500 hover:text-yellow-400 p-2 sm:p-3 rounded-full shadow-2xl border border-yellow-500/20 transition-all duration-300 hover:scale-110 cursor-pointer hidden sm:flex items-center justify-center">
               <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <div className="swiper-button-next-custom absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-yellow-500 hover:bg-yellow-600 text-black p-2 sm:p-3 rounded-full shadow-lg transition-colors -mr-4 sm:-mr-6 cursor-pointer">
+            <div className="swiper-button-next-featured absolute right-0 sm:right-2 top-1/2 -translate-y-1/2 z-10 bg-black/80 hover:bg-black text-yellow-500 hover:text-yellow-400 p-2 sm:p-3 rounded-full shadow-2xl border border-yellow-500/20 transition-all duration-300 hover:scale-110 cursor-pointer hidden sm:flex items-center justify-center">
               <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
           </div>
 
           {/* View All Button */}
-          <div className="text-center mt-6 sm:mt-8">
+          <div className="text-center mt-8 sm:mt-12">
             <button 
               onClick={() => window.location.href = '/menu'}
-              className="px-6 sm:px-8 py-2 sm:py-3 bg-yellow-500 text-black rounded-lg hover:bg-yellow-600 transition-colors font-semibold text-sm sm:text-base"
+              className="px-6 py-3 sm:px-8 sm:py-4 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black rounded-lg sm:rounded-xl hover:from-yellow-400 hover:to-yellow-500 transition-all duration-300 font-semibold sm:font-bold text-sm sm:text-lg shadow-lg hover:shadow-yellow-500/25 hover:scale-105"
             >
-              View Full Menu
+              Explore Full Menu
             </button>
           </div>
         </section>
       )}
 
       {/* Special Deals Section */}
-      {(() => {
-        // Filter items that match deal-related keywords
-        const dealKeywords = ['top deals', 'special deals', 'deals', 'offer', 'discount', 'promo', 'sale'];
-        const dealItems = foodItems.filter(item => {
-          if (!item || !item.isAvailable) return false;
-          
-          const categoryName = item.category?.name?.toLowerCase() || '';
-          const itemName = item.name?.toLowerCase() || '';
-          const itemDescription = item.description?.toLowerCase() || '';
-          
-          return dealKeywords.some(keyword => 
-            categoryName.includes(keyword) || 
-            itemName.includes(keyword) || 
-            itemDescription.includes(keyword)
-          );
-        });
-
-        if (dealItems.length === 0) return null;
-
-        return (
-          <section className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
-            <div className="flex items-center justify-between mb-6 sm:mb-8">
-              <div className="flex items-center space-x-3">
-                <Tag className="w-6 h-6 sm:w-8 sm:h-8 text-red-500" />
-                <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-red-400">
-                  Special Deals
-                </h2>
-              </div>
-              
-              {/* Deal Badge */}
-              <div className="hidden sm:flex items-center bg-red-500 text-white px-3 py-1 rounded-full text-sm font-semibold animate-pulse">
-                🔥 Limited Time
+      {dealItems.length > 0 && (
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12 bg-gradient-to-b from-gray-900/50 to-black rounded-2xl sm:rounded-3xl sm:mx-4 lg:mx-auto">
+          {/* Section Header */}
+          <div className="text-center mb-8 sm:mb-12">
+            <div className="inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-red-500/10 mb-3 sm:mb-4 relative">
+              <Tag className="w-6 h-6 sm:w-8 sm:h-8 text-red-500" />
+              <div className="absolute -top-1 -right-1 w-4 h-4 sm:w-6 sm:h-6 bg-red-500 rounded-full flex items-center justify-center">
+                <span className="text-xs font-bold text-white">!</span>
               </div>
             </div>
+            <h2 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-2 sm:mb-4">
+              Hot Deals
+            </h2>
+            <p className="text-gray-400 text-xs sm:text-sm md:text-lg max-w-2xl mx-auto px-4">
+              Limited time offers you don't want to miss
+            </p>
+          </div>
 
-            {/* Swiper Container for Deals */}
-            <div className="relative">
-              <Swiper
-                modules={[Navigation, Pagination, FreeMode, Autoplay]}
-                spaceBetween={16}
-                slidesPerView={1}
-                navigation={{
-                  nextEl: '.swiper-button-next-deals',
-                  prevEl: '.swiper-button-prev-deals',
-                }}
-                pagination={{ 
-                  clickable: true,
-                  bulletClass: 'swiper-pagination-bullet custom-bullet-deals',
-                  bulletActiveClass: 'swiper-pagination-bullet-active custom-bullet-deals-active',
-                }}
-                autoplay={{
-                  delay: 5000,
-                  disableOnInteraction: false,
-                  pauseOnMouseEnter: true,
-                }}
-                freeMode={true}
-                grabCursor={true}
-                breakpoints={{
-                  640: {
-                    slidesPerView: 2,
-                    spaceBetween: 20,
-                  },
-                  1024: {
-                    slidesPerView: 3,
-                    spaceBetween: 24,
-                  },
-                  1280: {
-                    slidesPerView: 4,
-                    spaceBetween: 30,
-                  }
-                }}
-                className="deals-swiper"
-              >
-                {dealItems.map((item) => (
-                  <SwiperSlide key={item?.id}>
-                    <div className="bg-gray-900 rounded-lg sm:rounded-2xl overflow-hidden group hover:scale-105 transition-all duration-300 cursor-pointer border border-red-700 hover:border-red-500 h-full relative">
-                      {/* Deal Badge */}
-                      <div className="absolute top-2 left-2 z-20 bg-red-500 text-white px-2 py-1 rounded-full text-xs font-bold animate-pulse">
-                        🔥 DEAL
-                      </div>
+          {/* Enhanced Swiper for Deals */}
+          <div className="relative">
+            <Swiper
+              modules={[Navigation, FreeMode, Autoplay]}
+              spaceBetween={16}
+              slidesPerView={1.3}
+              centeredSlides={false}
+              navigation={{
+                nextEl: '.swiper-button-next-deals',
+                prevEl: '.swiper-button-prev-deals',
+              }}
+              autoplay={{
+                delay: 3500,
+                disableOnInteraction: false,
+                pauseOnMouseEnter: true,
+              }}
+              freeMode={{
+                enabled: true,
+                momentum: true,
+                momentumBounce: false,
+                sticky: true
+              }}
+              grabCursor={true}
+              breakpoints={{
+                480: {
+                  slidesPerView: 1.6,
+                  spaceBetween: 20,
+                },
+                640: {
+                  slidesPerView: 2,
+                  spaceBetween: 24,
+                },
+                768: {
+                  slidesPerView: 2.3,
+                  spaceBetween: 24,
+                },
+                1024: {
+                  slidesPerView: 3,
+                  spaceBetween: 28,
+                  freeMode: false
+                },
+                1280: {
+                  slidesPerView: 4,
+                  spaceBetween: 32,
+                  freeMode: false
+                }
+              }}
+              className="deals-swiper pb-2"
+            >
+              {dealItems.map((item) => (
+                <SwiperSlide key={item?.id} className="py-2">
+                  <div className="h-full transform transition-transform duration-300 hover:scale-[1.02]">
+                    <FoodCard foodItem={item} />
+                  </div>
+                </SwiperSlide>
+              ))}
+            </Swiper>
 
-                      {/* Food Image */}
-                      {item?.image ? (
-                        <div className="relative h-32 sm:h-40 md:h-48 overflow-hidden bg-gray-800">
-                          <img
-                            src={item.image}
-                            alt={item.name}
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                            loading="lazy"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.style.display = 'none';
-                              const parent = target.parentElement;
-                              if (parent) {
-                                parent.innerHTML = `
-                                  <div class="w-full h-full bg-gray-800 flex items-center justify-center">
-                                    <svg class="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 text-gray-600" fill="currentColor" viewBox="0 0 24 24">
-                                      <path d="M8.5 11.5L11 14l4.5-4.5L18 12v6H6v-6l2.5-2.5z"/>
-                                      <circle cx="15.5" cy="9.5" r="1.5"/>
-                                      <rect x="2" y="4" width="20" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
-                                    </svg>
-                                  </div>
-                                `;
-                              }
-                            }}
-                          />
-                          <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded-full text-xs sm:text-sm font-bold">
-                            Rs {formatPrice(item?.price)}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="relative h-32 sm:h-40 md:h-48 bg-gray-800 flex items-center justify-center">
-                          <Utensils className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 text-gray-600" />
-                          <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded-full text-xs sm:text-sm font-bold">
-                            Rs {formatPrice(item?.price)}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Food Content */}
-                      <div className="p-3 sm:p-4 flex flex-col flex-grow bg-gray-900">
-                        <h3 className="font-semibold text-white mb-2 text-sm sm:text-base line-clamp-1 group-hover:text-red-400">
-                          {item?.name || 'Unnamed Item'}
-                        </h3>
-                        <p className="text-gray-400 text-xs sm:text-sm mb-3 line-clamp-2 flex-grow">
-                          {item?.description || 'No description available'}
-                        </p>
-                        
-                        {/* Category and Add to Cart */}
-                        <div className="flex justify-between items-center mt-auto">
-                          <span className="text-xs text-red-400 bg-red-900/30 px-2 py-1 rounded border border-red-700">
-                            {item?.category?.name || 'Uncategorized'}
-                          </span>
-                          
-                          {/* Mobile Add to Cart (Icon Only) */}
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              addToCart(item);
-                            }}
-                            className="sm:hidden bg-red-500 text-white p-2 rounded-full hover:bg-red-600 transition-colors flex items-center justify-center"
-                            aria-label="Add to cart"
-                          >
-                            <ShoppingCartIcon className="w-4 h-4" />
-                          </button>
-                          
-                          {/* Desktop Add to Cart (With Text) */}
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              addToCart(item);
-                            }}
-                            className="hidden sm:flex bg-red-500 text-white px-3 py-1 rounded-lg hover:bg-red-600 transition-colors items-center space-x-1 text-xs sm:text-sm font-medium"
-                          >
-                            <ShoppingCartIcon className="w-3 h-3 sm:w-4 sm:h-4" />
-                            <span>Add to Cart</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </SwiperSlide>
-                ))}
-              </Swiper>
-
-              {/* Custom Navigation Buttons for Deals */}
-              <div className="swiper-button-prev-deals absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-red-500 hover:bg-red-600 text-white p-2 sm:p-3 rounded-full shadow-lg transition-colors -ml-4 sm:-ml-6 cursor-pointer">
-                <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
-              </div>
-              <div className="swiper-button-next-deals absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-red-500 hover:bg-red-600 text-white p-2 sm:p-3 rounded-full shadow-lg transition-colors -mr-4 sm:-mr-6 cursor-pointer">
-                <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
-              </div>
+            {/* Custom Navigation Buttons */}
+            <div className="swiper-button-prev-deals absolute left-0 sm:left-2 top-1/2 -translate-y-1/2 z-10 bg-black/80 hover:bg-black text-red-500 hover:text-red-400 p-2 sm:p-3 rounded-full shadow-2xl border border-red-500/20 transition-all duration-300 hover:scale-110 cursor-pointer hidden sm:flex items-center justify-center">
+              <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-
-            {/* View All Deals Button */}
-            <div className="text-center mt-6 sm:mt-8">
-              <button 
-                onClick={() => window.location.href = '/menu'}
-                className="px-6 sm:px-8 py-2 sm:py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-semibold text-sm sm:text-base flex items-center justify-center mx-auto space-x-2"
-              >
-                <Tag className="w-4 h-4" />
-                <span>View All Deals</span>
-              </button>
+            <div className="swiper-button-next-deals absolute right-0 sm:right-2 top-1/2 -translate-y-1/2 z-10 bg-black/80 hover:bg-black text-red-500 hover:text-red-400 p-2 sm:p-3 rounded-full shadow-2xl border border-red-500/20 transition-all duration-300 hover:scale-110 cursor-pointer hidden sm:flex items-center justify-center">
+              <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-          </section>
-        );
-      })()}
+          </div>
+
+          {/* View All Deals Button */}
+          <div className="text-center mt-8 sm:mt-12">
+            <button 
+              onClick={() => window.location.href = '/menu'}
+              className="px-6 py-3 sm:px-8 sm:py-4 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg sm:rounded-xl hover:from-red-400 hover:to-red-500 transition-all duration-300 font-semibold sm:font-bold text-sm sm:text-lg shadow-lg hover:shadow-red-500/25 hover:scale-105 flex items-center justify-center mx-auto space-x-2 sm:space-x-3"
+            >
+              <Tag className="w-4 h-4 sm:w-5 sm:h-5" />
+              <span>View All Deals</span>
+            </button>
+          </div>
+        </section>
+      )}
 
       {/* Custom Styles */}
       <style jsx global>{`
-        .food-items-swiper,
+        .featured-swiper,
         .deals-swiper {
-          padding-bottom: 40px !important;
+          overflow: visible !important;
         }
 
-        .food-items-swiper .swiper-pagination,
-        .deals-swiper .swiper-pagination {
-          bottom: 0 !important;
+        .featured-swiper .swiper-slide,
+        .deals-swiper .swiper-slide {
+          transition: transform 0.3s ease;
         }
 
-        .custom-bullet {
-          width: 12px !important;
-          height: 12px !important;
-          background: #6b7280 !important;
-          opacity: 1 !important;
-          margin: 0 4px !important;
-          border-radius: 50% !important;
-          transition: all 0.3s ease !important;
+        .featured-swiper .swiper-slide:hover,
+        .deals-swiper .swiper-slide:hover {
+          transform: translateY(-8px);
         }
 
-        .custom-bullet-active {
-          background: #eab308 !important;
-          transform: scale(1.2) !important;
-        }
-
-        /* Deals Section Bullets */
-        .custom-bullet-deals {
-          width: 12px !important;
-          height: 12px !important;
-          background: #6b7280 !important;
-          opacity: 1 !important;
-          margin: 0 4px !important;
-          border-radius: 50% !important;
-          transition: all 0.3s ease !important;
-        }
-
-        .custom-bullet-deals-active {
-          background: #ef4444 !important;
-          transform: scale(1.2) !important;
-        }
-
-        .swiper-button-prev-custom:hover,
-        .swiper-button-next-custom:hover,
-        .swiper-button-prev-deals:hover,
-        .swiper-button-next-deals:hover {
-          transform: translateY(-50%) scale(1.1);
+        .swiper-button-prev-featured,
+        .swiper-button-next-featured,
+        .swiper-button-prev-deals,
+        .swiper-button-next-deals {
+          backdrop-filter: blur(10px);
         }
 
         @media (max-width: 640px) {
-          .custom-bullet,
-          .custom-bullet-deals {
-            width: 8px !important;
-            height: 8px !important;
-            margin: 0 3px !important;
+          .featured-swiper,
+          .deals-swiper {
+            padding: 0 4px;
+          }
+          
+          .featured-swiper .swiper-slide,
+          .deals-swiper .swiper-slide {
+            opacity: 0.6;
+            transition: opacity 0.3s ease;
+          }
+          
+          .featured-swiper .swiper-slide-active,
+          .deals-swiper .swiper-slide-active,
+          .featured-swiper .swiper-slide-next,
+          .deals-swiper .swiper-slide-next {
+            opacity: 1;
           }
         }
       `}</style>

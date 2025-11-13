@@ -51,7 +51,7 @@ export default function CategoryTab({ categories }: CategoryTabProps) {
     } else {
       return isDeals 
         ? 'bg-gray-900 text-red-400 hover:bg-red-900/30 border border-red-700/50 hover:border-red-500' 
-        : 'bg-[#101828] text-white hover:bg-blue-600'
+        : 'bg-[#101828] text-white hover:bg-yellow-700'
     }
   }
 

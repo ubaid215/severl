@@ -103,7 +103,7 @@ body {
 
 
 /* Custom scrollbar for webkit browsers */
-::-webkit-scrollbar {
+/* ::-webkit-scrollbar {
   width: 8px;
 }
 
@@ -112,10 +112,10 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #a8a200;
+  background: yellow;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #687107;
-}
+  background: yellow;
+} */
