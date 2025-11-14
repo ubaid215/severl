@@ -16,22 +16,22 @@ interface Slide {
 const slides: Slide[] = [
   {
     id: 1,
-    image: "/images/burger.jpg",
+    image: "/images/banner-1.webp",
     title: "Juicy Burgers",
     description: "Delicious handcrafted burgers made with fresh ingredients.",
   },
   {
     id: 2,
-    image: "/images/pizza.jpg",
-    title: "Hot Pizzas",
-    description: "Cheesy pizzas straight from the oven, perfect for sharing.",
+    image: "/images/banner-2.webp",
+    title: "Hot Wings",
+    description: "Cheesy wings straight from the oven, perfect for sharing.",
   },
-  {
-    id: 3,
-    image: "/images/fried-chicken.jpg",
-    title: "Crispy Chicken",
-    description: "Golden fried chicken with mouth-watering flavors.",
-  },
+  // {
+  //   id: 3,
+  //   image: "/images/fried-chicken.jpg",
+  //   title: "Crispy Chicken",
+  //   description: "Golden fried chicken with mouth-watering flavors.",
+  // },
 ];
 
 export default function HeroCarousel() {
