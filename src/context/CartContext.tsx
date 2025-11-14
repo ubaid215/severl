@@ -10,8 +10,10 @@ interface CartItem {
   quantity: number
   price: number
   foodItem: {
+    id: string
     name: string
     image?: string
+    price: number
   }
 }
 
@@ -28,13 +30,13 @@ interface CartContextType {
   addToCart: (foodItemId: string, quantity?: number) => Promise<void>
   removeFromCart: (cartItemId: string) => Promise<void>
   updateQuantity: (cartItemId: string, quantity: number) => Promise<void>
+  clearCart: () => Promise<void>
   refreshCart: () => void
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined)
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  // Single instance of the cart hook for entire app
   const cartData = useOptimizedCart()
 
   return (

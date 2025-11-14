@@ -14,7 +14,8 @@ import {
   ChevronRight,
   User,
   ClipboardCheckIcon,
-  DollarSignIcon
+  DollarSignIcon,
+  Home
 } from 'lucide-react'
 
 interface User {
@@ -49,6 +50,11 @@ export default function AdminSideBar({ user }: AdminSideBarProps) {
 
   const navigationItems = [
     
+    { 
+      label: 'Dashboard', 
+      href: '/admin', 
+      icon: Home
+    },
     { 
       label: 'Categories', 
       href: '/admin/categories', 

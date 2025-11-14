@@ -9,8 +9,10 @@ interface CartItem {
   quantity: number
   price: number
   foodItem: {
+    id: string
     name: string
     image?: string
+    price: number
   }
 }
 
@@ -36,7 +38,7 @@ let globalCartCache: {
 // Global fetch promise to prevent duplicate requests
 let globalFetchPromise: Promise<Cart | null> | null = null
 
-const CART_CACHE_DURATION = 10 * 1000 // 10 seconds
+const CART_CACHE_DURATION = 3 * 1000 // 3 seconds for better sync
 
 export function useOptimizedCart() {
   const [cart, setCart] = useState<Cart | null>(null)
@@ -55,9 +57,15 @@ export function useOptimizedCart() {
     setSessionId(id)
   }, [])
 
-  // Fetch cart function with global deduplication
+  // Enhanced fetch cart function with better cache invalidation
   const fetchCart = useCallback(async (force: boolean = false) => {
     if (!sessionId) return
+
+    // Clear cache if forced
+    if (force) {
+      globalCartCache.timestamp = 0
+      console.log('🗑️ Cart cache invalidated - forced refresh')
+    }
 
     // Use global cache if available and fresh
     if (
@@ -71,7 +79,7 @@ export function useOptimizedCart() {
         setLoading(false)
       }
       console.log('✅ Using cached cart data')
-      return
+      return globalCartCache.data
     }
 
     // If already fetching, wait for that promise
@@ -83,13 +91,14 @@ export function useOptimizedCart() {
           setCart(result)
           setLoading(false)
         }
+        return result
       } catch (error) {
         console.error('Cart fetch error:', error)
         if (mountedRef.current) {
           setLoading(false)
         }
+        return null
       }
-      return
     }
 
     // Clear existing timeout
@@ -99,20 +108,50 @@ export function useOptimizedCart() {
 
     // Mark as fetching
     globalCartCache.isFetching = true
+    if (mountedRef.current) {
+      setLoading(true)
+    }
 
     // Create new fetch promise
-    globalFetchPromise = new Promise(async (resolve) => {
-      // Debounce the fetch
+    globalFetchPromise = new Promise(async (resolve, reject) => {
       fetchTimeoutRef.current = setTimeout(async () => {
         try {
-          console.log('🔄 Fetching cart from API')
-          const response = await fetch(`/api/cart?sessionId=${sessionId}`)
+          console.log('🔄 Fetching cart from API...')
+          const response = await fetch(`/api/cart?sessionId=${sessionId}&t=${Date.now()}`, {
+            cache: 'no-cache'
+          })
+          
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`)
+          }
+          
           const data = await response.json()
+          console.log('📦 Cart API response:', data)
 
-          const cartData = {
-            items: data.items || [],
-            totalItems: data.totalItems || 0,
-            totalPrice: data.totalPrice || 0
+          let cartData: Cart = {
+            items: [],
+            totalItems: 0,
+            totalPrice: 0
+          }
+
+          if (data.success && data.data) {
+            // Transform data to match our Cart interface
+            cartData = {
+              items: data.data.items?.map((item: any) => ({
+                id: item.id,
+                foodItemId: item.foodItemId,
+                quantity: item.quantity,
+                price: item.foodItem?.price || 0,
+                foodItem: {
+                  id: item.foodItem?.id || item.foodItemId,
+                  name: item.foodItem?.name || 'Unknown Item',
+                  image: item.foodItem?.image,
+                  price: item.foodItem?.price || 0
+                }
+              })) || [],
+              totalItems: data.data.itemCount || 0,
+              totalPrice: data.data.subtotal || 0
+            }
           }
 
           // Update global cache
@@ -125,23 +164,30 @@ export function useOptimizedCart() {
 
           if (mountedRef.current) {
             setCart(cartData)
+            setLoading(false)
           }
 
+          console.log('✅ Cart data updated:', cartData)
           resolve(cartData)
         } catch (error) {
-          console.error('Error fetching cart:', error)
+          console.error('❌ Error fetching cart:', error)
           globalCartCache.isFetching = false
-          resolve(null)
-        } finally {
           if (mountedRef.current) {
             setLoading(false)
           }
+          reject(error)
+        } finally {
           globalFetchPromise = null
         }
-      }, 300) // 300ms debounce
+      }, 100) // Reduced debounce to 100ms for faster sync
     })
 
-    await globalFetchPromise
+    try {
+      const result = await globalFetchPromise
+      return result
+    } catch (error) {
+      return null
+    }
   }, [sessionId])
 
   // Fetch cart on mount and when sessionId changes
@@ -150,80 +196,172 @@ export function useOptimizedCart() {
     if (sessionId) {
       fetchCart()
     }
+
+    // Listen for cart updates from anywhere in the app
+    const handleCartUpdate = (event: CustomEvent) => {
+      console.log('📢 useOptimizedCart: Received cart update event', event.detail)
+      fetchCart(true) // Force refresh
+    }
+
+    // Listen for both custom events and storage events
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key === 'cartUpdated') {
+        console.log('💾 Storage event: cart updated')
+        fetchCart(true)
+      }
+    }
+
+    window.addEventListener('cartUpdated', handleCartUpdate as EventListener)
+    window.addEventListener('storage', handleStorageChange)
+    
     return () => {
       mountedRef.current = false
+      window.removeEventListener('cartUpdated', handleCartUpdate as EventListener)
+      window.removeEventListener('storage', handleStorageChange)
     }
   }, [sessionId, fetchCart])
 
-  // Add to cart with optimistic update
+  // Enhanced add to cart with immediate cache invalidation
   const addToCart = useCallback(async (foodItemId: string, quantity: number = 1) => {
-    if (!sessionId) return
+    if (!sessionId) {
+      console.error('❌ No session ID available')
+      return
+    }
 
     try {
-      // Invalidate cache
+      // Immediately invalidate cache
       globalCartCache.timestamp = 0
+      
+      console.log('🛒 Adding item to cart:', { foodItemId, quantity, sessionId })
 
       const response = await fetch('/api/cart', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, foodItemId, quantity })
+        body: JSON.stringify({ 
+          sessionId, 
+          foodItemId, 
+          quantity 
+        })
       })
 
-      if (response.ok) {
-        // Fetch updated cart after short delay
-        setTimeout(() => fetchCart(true), 500)
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`)
+      }
+
+      const data = await response.json()
+      console.log('✅ Add to cart response:', data)
+      
+      if (data.success) {
+        // Fetch updated cart immediately
+        await fetchCart(true)
+        
+        // Trigger multiple update methods for maximum compatibility
+        window.dispatchEvent(new CustomEvent('cartUpdated', { 
+          detail: { source: 'addToCart', foodItemId, quantity } 
+        }))
+        
+        // Also update localStorage as a backup sync method
+        localStorage.setItem('cartUpdated', Date.now().toString())
+        
+        console.log('🎉 Item added to cart and events dispatched')
+      } else {
+        throw new Error(data.message || 'Failed to add item to cart')
       }
     } catch (error) {
-      console.error('Error adding to cart:', error)
+      console.error('❌ Error adding to cart:', error)
+      // Even on error, refresh cart to ensure sync
+      await fetchCart(true)
     }
   }, [sessionId, fetchCart])
 
-  // Remove from cart
+  // Enhanced remove from cart
   const removeFromCart = useCallback(async (cartItemId: string) => {
     if (!sessionId) return
 
     try {
-      // Invalidate cache
       globalCartCache.timestamp = 0
 
+      console.log('🗑️ Removing item from cart:', cartItemId)
+
       const response = await fetch(`/api/cart/${cartItemId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId })
       })
 
       if (response.ok) {
-        // Fetch updated cart after short delay
-        setTimeout(() => fetchCart(true), 500)
+        await fetchCart(true)
+        window.dispatchEvent(new CustomEvent('cartUpdated', { 
+          detail: { source: 'removeFromCart', cartItemId } 
+        }))
+        localStorage.setItem('cartUpdated', Date.now().toString())
       }
     } catch (error) {
-      console.error('Error removing from cart:', error)
+      console.error('❌ Error removing from cart:', error)
+      await fetchCart(true)
     }
   }, [sessionId, fetchCart])
 
-  // Update quantity
+  // Enhanced update quantity
   const updateQuantity = useCallback(async (cartItemId: string, quantity: number) => {
     if (!sessionId) return
 
     try {
-      // Invalidate cache
       globalCartCache.timestamp = 0
+
+      console.log('📊 Updating quantity:', { cartItemId, quantity })
 
       const response = await fetch(`/api/cart/${cartItemId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quantity })
+        body: JSON.stringify({ quantity, sessionId })
       })
 
       if (response.ok) {
-        // Fetch updated cart after short delay
-        setTimeout(() => fetchCart(true), 500)
+        await fetchCart(true)
+        window.dispatchEvent(new CustomEvent('cartUpdated', { 
+          detail: { source: 'updateQuantity', cartItemId, quantity } 
+        }))
+        localStorage.setItem('cartUpdated', Date.now().toString())
       }
     } catch (error) {
-      console.error('Error updating quantity:', error)
+      console.error('❌ Error updating quantity:', error)
+      await fetchCart(true)
+    }
+  }, [sessionId, fetchCart])
+
+  // Clear entire cart
+  const clearCart = useCallback(async () => {
+    if (!sessionId) return
+
+    try {
+      globalCartCache.timestamp = 0
+
+      console.log('🧹 Clearing entire cart')
+
+      const response = await fetch('/api/cart/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId })
+      })
+
+      if (response.ok) {
+        await fetchCart(true)
+        window.dispatchEvent(new CustomEvent('cartUpdated', { 
+          detail: { source: 'clearCart' } 
+        }))
+        localStorage.setItem('cartUpdated', Date.now().toString())
+      }
+    } catch (error) {
+      console.error('❌ Error clearing cart:', error)
+      await fetchCart(true)
     }
   }, [sessionId, fetchCart])
 
   // Manual refresh
   const refreshCart = useCallback(() => {
+    console.log('🔃 Manual cart refresh triggered')
     fetchCart(true)
   }, [fetchCart])
 
@@ -234,6 +372,7 @@ export function useOptimizedCart() {
     addToCart,
     removeFromCart,
     updateQuantity,
+    clearCart,
     refreshCart
   }
 }
