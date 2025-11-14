@@ -1,0 +1,15 @@
+import { MetadataRoute } from "next";
+
+export default function robots(): MetadataRoute.Robots {
+  return {
+    rules: [
+      {
+        userAgent: "*",
+        allow: "/",
+        disallow: ["/admin", "/dashboard", "/api/secret"],
+      },
+    ],
+    sitemap: "https://several.life/sitemap.xml",
+    host: "https://several.life",
+  };
+}
