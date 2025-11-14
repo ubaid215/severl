@@ -1,5 +1,8 @@
+// app/(customer)/layout.tsx
 import Footer from "@/components/layout/Footer";
 import Navigation from "@/components/layout/Navigation";
+import { DataProvider } from "@/context/DataContext";
+import { CartProvider } from "@/context/CartContext";
 import { ReactNode } from "react";
 
 export const metadata = {
@@ -9,10 +12,12 @@ export const metadata = {
 
 export default function CustomerLayout({ children }: { children: ReactNode }) {
   return (
-    <>
-      <Navigation />
-      <main>{children}</main>
-      <Footer/>
-    </>
+    <DataProvider>
+      <CartProvider>
+        <Navigation />
+        <main>{children}</main>
+        <Footer />
+      </CartProvider>
+    </DataProvider>
   );
 }

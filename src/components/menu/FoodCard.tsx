@@ -1,8 +1,8 @@
 "use client";
 import Image from "next/image";
 import { ShoppingCart, Clock, Tag, Flame } from "lucide-react";
-import { getSessionId } from "@/utils/session";
 import { useState } from "react";
+import { useCart } from "@/context/CartContext";
 
 interface FoodItem {
   id: string;
@@ -22,8 +22,11 @@ interface FoodCardProps {
 }
 
 export default function FoodCard({ foodItem }: FoodCardProps) {
-  const [loading, setLoading] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
+  
+  // Use cart context - single source of truth
+  const { addToCart } = useCart();
 
   // Function to check if this item is part of deals category
   const isDealItem = (): boolean => {
@@ -39,9 +42,7 @@ export default function FoodCard({ foodItem }: FoodCardProps) {
 
   // Function to shorten description
   const shortenDescription = (description: string | null, maxLength: number = 50): string => {
-    // Handle null or undefined description
     if (!description) return 'No description available';
-    
     if (description.length <= maxLength) return description;
     return description.substring(0, maxLength).trim() + '...';
   };
@@ -49,32 +50,16 @@ export default function FoodCard({ foodItem }: FoodCardProps) {
   const isDeals = isDealItem();
 
   const handleAddToCart = async () => {
-    if (!foodItem.isAvailable) return;
+    if (!foodItem.isAvailable || isAdding) return;
 
+    setIsAdding(true);
     try {
-      setLoading(true);
-      const sessionId = getSessionId();
-
-      const res = await fetch("/api/cart", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId,
-          foodItemId: foodItem.id,
-          quantity: 1,
-        }),
-      });
-
-      const data = await res.json();
-      if (res.ok) {
-        console.log("✅ Added to cart:", data);
-      } else {
-        console.error("❌ Failed to add to cart:", data.error);
-      }
+      await addToCart(foodItem.id, 1);
+      console.log("✅ Added to cart:", foodItem.name);
     } catch (err) {
       console.error("Add to cart error:", err);
     } finally {
-      setLoading(false);
+      setIsAdding(false);
     }
   };
 
@@ -95,7 +80,7 @@ export default function FoodCard({ foodItem }: FoodCardProps) {
         </div>
       )}
 
-      {/* Food Image - Fixed 400x400px container */}
+      {/* Food Image */}
       <div className="relative w-full aspect-square overflow-hidden bg-black">
         {foodItem.image && !imageError ? (
           <Image
@@ -144,7 +129,7 @@ export default function FoodCard({ foodItem }: FoodCardProps) {
           {foodItem.name}
         </h3>
 
-        {/* Shorter Description */}
+        {/* Description */}
         <p className="text-gray-400 text-sm sm:text-base mb-3 sm:mb-4 line-clamp-2 flex-grow leading-relaxed">
           {shortenDescription(foodItem.description)}
         </p>
@@ -168,41 +153,49 @@ export default function FoodCard({ foodItem }: FoodCardProps) {
           {/* Mobile - Full width button */}
           <button
             onClick={handleAddToCart}
-            disabled={!foodItem.isAvailable || loading}
+            disabled={!foodItem.isAvailable || isAdding}
             className={`sm:hidden w-full flex items-center justify-center
               px-4 py-3 rounded-lg text-sm font-semibold
               transition-all duration-200 ease-in-out
               ${
                 foodItem.isAvailable
                   ? isDeals
-                    ? "bg-red-500 text-white hover:bg-red-600 active:scale-95"
-                    : "bg-yellow-500 text-black hover:bg-yellow-600 active:scale-95"
+                    ? "bg-red-500 text-white hover:bg-red-600 active:scale-95 disabled:bg-red-500/50"
+                    : "bg-yellow-500 text-black hover:bg-yellow-600 active:scale-95 disabled:bg-yellow-500/50"
                   : "bg-gray-600 text-gray-400 cursor-not-allowed"
               }`}
           >
-            <ShoppingCart className="w-4 h-4 mr-2" />
+            {isAdding ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+            ) : (
+              <ShoppingCart className="w-4 h-4 mr-2" />
+            )}
             <span className="truncate">
-              {loading ? "Adding..." : foodItem.isAvailable ? "Add to Cart" : "Unavailable"}
+              {isAdding ? "Adding..." : foodItem.isAvailable ? "Add to Cart" : "Unavailable"}
             </span>
           </button>
 
           {/* Desktop */}
           <button
             onClick={handleAddToCart}
-            disabled={!foodItem.isAvailable || loading}
+            disabled={!foodItem.isAvailable || isAdding}
             className={`hidden sm:flex items-center justify-center
               w-full px-6 py-3.5 rounded-lg text-base font-semibold
               transition-all duration-300 ease-in-out
               ${
                 foodItem.isAvailable
                   ? isDeals
-                    ? "bg-red-500 text-white hover:bg-red-600 hover:scale-105"
-                    : "bg-yellow-500 text-black hover:bg-yellow-600 hover:scale-105"
+                    ? "bg-red-500 text-white hover:bg-red-600 hover:scale-105 disabled:bg-red-500/50 disabled:hover:scale-100"
+                    : "bg-yellow-500 text-black hover:bg-yellow-600 hover:scale-105 disabled:bg-yellow-500/50 disabled:hover:scale-100"
                   : "bg-gray-600 text-gray-400 cursor-not-allowed"
               }`}
           >
-            <ShoppingCart className="w-5 h-5 mr-2" />
-            {loading ? "Adding..." : foodItem.isAvailable ? "Add to Cart" : "Unavailable"}
+            {isAdding ? (
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-current mr-2"></div>
+            ) : (
+              <ShoppingCart className="w-5 h-5 mr-2" />
+            )}
+            {isAdding ? "Adding..." : foodItem.isAvailable ? "Add to Cart" : "Unavailable"}
           </button>
         </div>
       </div>

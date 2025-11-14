@@ -83,10 +83,12 @@ export class FoodController {
 
   static async getCategoryById(
     req: NextRequest, 
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> | { id: string } }
   ): Promise<NextResponse> {
     try {
-      const category = await CategoryModel.getById(params.id);
+      // Handle both Promise and regular params for Next.js 15 compatibility
+      const resolvedParams = 'then' in params ? await params : params;
+      const category = await CategoryModel.getById(resolvedParams.id);
 
       if (!category) {
         return NextResponse.json(
@@ -110,9 +112,11 @@ export class FoodController {
 
   static async updateCategory(
     req: NextRequest, 
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> | { id: string } }
   ): Promise<NextResponse> {
     try {
+      // Handle both Promise and regular params for Next.js 15 compatibility
+      const resolvedParams = 'then' in params ? await params : params;
       const formData = await req.formData();
       const name = formData.get('name') as string;
       const imageFile = formData.get('image') as File | null;
@@ -122,7 +126,7 @@ export class FoodController {
       if (name) updateData.name = name;
       
       // Get existing category to handle image cleanup
-      const existingCategory = await CategoryModel.getById(params.id);
+      const existingCategory = await CategoryModel.getById(resolvedParams.id);
       if (!existingCategory) {
         return NextResponse.json(
           { error: 'Category not found' },
@@ -150,7 +154,7 @@ export class FoodController {
         updateData.image = imageUrl;
       }
 
-      const category = await CategoryModel.update(params.id, updateData);
+      const category = await CategoryModel.update(resolvedParams.id, updateData);
 
       return NextResponse.json({
         success: true,
@@ -176,17 +180,20 @@ export class FoodController {
 
   static async deleteCategory(
     req: NextRequest, 
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> | { id: string } }
   ): Promise<NextResponse> {
     try {
+      // Handle both Promise and regular params for Next.js 15 compatibility
+      const resolvedParams = 'then' in params ? await params : params;
+      
       // Get category first to delete image
-      const category = await CategoryModel.getById(params.id);
+      const category = await CategoryModel.getById(resolvedParams.id);
       
       if (category?.image) {
         await deleteFromCloudinary(category.image);
       }
 
-      await CategoryModel.delete(params.id);
+      await CategoryModel.delete(resolvedParams.id);
 
       return NextResponse.json({
         success: true,
@@ -218,10 +225,12 @@ export class FoodController {
 
   static async toggleCategoryStatus(
     req: NextRequest, 
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> | { id: string } }
   ): Promise<NextResponse> {
     try {
-      const category = await CategoryModel.toggleStatus(params.id);
+      // Handle both Promise and regular params for Next.js 15 compatibility
+      const resolvedParams = 'then' in params ? await params : params;
+      const category = await CategoryModel.toggleStatus(resolvedParams.id);
 
       return NextResponse.json({
         success: true,
@@ -334,10 +343,12 @@ export class FoodController {
 
   static async getFoodItemById(
     req: NextRequest, 
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> | { id: string } }
   ): Promise<NextResponse> {
     try {
-      const foodItem = await FoodItemModel.getById(params.id);
+      // Handle both Promise and regular params for Next.js 15 compatibility
+      const resolvedParams = 'then' in params ? await params : params;
+      const foodItem = await FoodItemModel.getById(resolvedParams.id);
 
       if (!foodItem) {
         return NextResponse.json(
@@ -453,17 +464,20 @@ export class FoodController {
 
   static async deleteFoodItem(
     req: NextRequest, 
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> | { id: string } }
   ): Promise<NextResponse> {
     try {
+      // Handle both Promise and regular params for Next.js 15 compatibility
+      const resolvedParams = 'then' in params ? await params : params;
+      
       // Get food item first to delete image
-      const foodItem = await FoodItemModel.getById(params.id);
+      const foodItem = await FoodItemModel.getById(resolvedParams.id);
       
       if (foodItem?.image) {
         await deleteFromCloudinary(foodItem.image);
       }
 
-      await FoodItemModel.delete(params.id);
+      await FoodItemModel.delete(resolvedParams.id);
 
       return NextResponse.json({
         success: true,
@@ -488,10 +502,12 @@ export class FoodController {
 
   static async toggleFoodItemAvailability(
     req: NextRequest, 
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> | { id: string } }
   ): Promise<NextResponse> {
     try {
-      const foodItem = await FoodItemModel.toggleAvailability(params.id);
+      // Handle both Promise and regular params for Next.js 15 compatibility
+      const resolvedParams = 'then' in params ? await params : params;
+      const foodItem = await FoodItemModel.toggleAvailability(resolvedParams.id);
 
       return NextResponse.json({
         success: true,

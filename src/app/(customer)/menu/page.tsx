@@ -1,6 +1,7 @@
+// app/menu/page.tsx
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import CategoryTab from '@/components/menu/CategoryTabs'
 import FoodCard from '@/components/menu/FoodCard'
@@ -27,30 +28,31 @@ interface Category {
   isActive: boolean
 }
 
-export default function MenuPage() {
+function MenuContent() {
+  const searchParams = useSearchParams()
+  const activeCategory = searchParams.get('category')
+  
   const [categories, setCategories] = useState<Category[]>([])
   const [foodItems, setFoodItems] = useState<FoodItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchParamsReady, setSearchParamsReady] = useState(false)
-  
-  // This will prevent the error during static generation
-  let activeCategory: string | null = null
-  try {
-    const searchParams = useSearchParams()
-    activeCategory = searchParams.get('category')
-    if (!searchParamsReady) setSearchParamsReady(true)
-  } catch (error) {
-    // During static generation, useSearchParams will throw an error
-    // We'll handle this gracefully
-  }
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true)
+        
+        // Single fetch if category is selected, otherwise fetch all
+        const endpoint = activeCategory 
+          ? `/api/food-items?categoryId=${activeCategory}`
+          : '/api/food-items'
+        
         const [categoriesRes, foodItemsRes] = await Promise.all([
-          fetch('/api/categories'),
-          fetch('/api/food-items')
+          fetch('/api/categories', {
+            next: { revalidate: 300 }
+          }),
+          fetch(endpoint, {
+            next: { revalidate: 120 }
+          })
         ])
 
         const categoriesData = await categoriesRes.json()
@@ -66,14 +68,12 @@ export default function MenuPage() {
     }
 
     fetchData()
-  }, [])
+  }, [activeCategory]) // Only refetch when category changes
 
-  // Filter food items based on active category
   const filteredItems = activeCategory 
     ? foodItems.filter(item => item.category.id === activeCategory && item.isAvailable)
     : foodItems.filter(item => item.isAvailable)
 
-  // Group food items by category
   const foodItemsByCategory = categories.reduce((acc, category) => {
     if (category.isActive) {
       acc[category.id] = foodItems.filter(item => 
@@ -93,7 +93,6 @@ export default function MenuPage() {
 
   return (
     <div className="min-h-screen bg-black">
-      {/* Header */}
       <div className="bg-[#101828] border-b border-yellow-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="text-center">
@@ -113,12 +112,9 @@ export default function MenuPage() {
         </div>
       </div>
 
-      {/* Category Tabs */}
       <CategoryTab categories={categories} />
 
-      {/* Menu Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Show filtered items when a category is selected from home page */}
         {activeCategory && (
           <section className="mb-12">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 pb-2 border-b-2 border-yellow-500">
@@ -148,10 +144,8 @@ export default function MenuPage() {
           </section>
         )}
 
-        {/* Show all categories when no specific category is selected */}
         {!activeCategory && (
           <>
-            {/* All Menu Section */}
             <section className="mb-12">
               <h2 className="text-2xl font-bold text-white mb-6 pb-2 border-b-2 border-yellow-500 flex items-center">
                 <Star className="w-6 h-6 mr-2 text-yellow-500" />
@@ -172,7 +166,6 @@ export default function MenuPage() {
               )}
             </section>
 
-            {/* Categories Sections */}
             {categories
               .filter(category => category.isActive && foodItemsByCategory[category.id]?.length > 0)
               .map((category) => (
@@ -192,5 +185,17 @@ export default function MenuPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function MenuPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-yellow-500 text-lg">Loading menu...</div>
+      </div>
+    }>
+      <MenuContent />
+    </Suspense>
   )
 }

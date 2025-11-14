@@ -29,11 +29,12 @@ export default function CategoryTab({ categories }: CategoryTabProps) {
     }
   }, [pathname])
 
+  // Filter active categories
   const activeCategories = categories.filter(cat => cat.isActive)
 
   // Function to check if a category is deals-related
   const isDealCategory = (categoryName: string): boolean => {
-    const dealKeywords = ['top deals', 'special deals', 'deals', 'offer', 'discount', 'promo', 'sale',]
+    const dealKeywords = ['top deals', 'special deals', 'deals', 'offer', 'discount', 'promo', 'sale']
     return dealKeywords.some(keyword => 
       categoryName.toLowerCase().includes(keyword.toLowerCase())
     )
@@ -58,7 +59,7 @@ export default function CategoryTab({ categories }: CategoryTabProps) {
   return (
     <div className="w-full bg-black border-b border-yellow-500">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex space-x-2 overflow-x-auto py-4">
+        <div className="flex space-x-2 overflow-x-auto py-4 scrollbar-hide">
           {/* All Categories Tab */}
           <Link
             href="/menu"
@@ -78,7 +79,7 @@ export default function CategoryTab({ categories }: CategoryTabProps) {
                 href={`/menu/${category.id}`}
                 className={`flex items-center flex-shrink-0 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 relative ${getTabStyling(category.id, category.name)}`}
               >
-                {/* Add fire emoji for deals categories */}
+                {/* Add icon for deals categories */}
                 {isDeals && (
                   <>
                     <Tag className="w-4 h-4 mr-2" />
@@ -102,6 +103,16 @@ export default function CategoryTab({ categories }: CategoryTabProps) {
           })}
         </div>
       </div>
+
+      <style jsx global>{`
+        .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+        }
+      `}</style>
     </div>
   )
 }

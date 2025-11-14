@@ -1,63 +1,20 @@
-// components/Navigation.tsx
+// components/layout/Navigation.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ShoppingCart, Menu, X, Home, UtensilsCrossed, Phone, User } from "lucide-react";
+import { ShoppingCart, Menu, X, Home, UtensilsCrossed, Phone } from "lucide-react";
 import CartDrawer from "../cart/CartDrawer";
+import { useCart } from "@/context/CartContext";
 
 export default function Navigation() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [cartItemCount, setCartItemCount] = useState(0);
-  const [sessionId, setSessionId] = useState<string>("");
-
-  // Initialize session ID
-  useEffect(() => {
-    let existingSessionId = localStorage.getItem("sessionId");
-    if (!existingSessionId) {
-      existingSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      localStorage.setItem("sessionId", existingSessionId);
-    }
-    setSessionId(existingSessionId);
-  }, []);
-
-  // Fetch cart item count
-  const fetchCartCount = async () => {
-    if (!sessionId) return;
-    
-    try {
-      const response = await fetch(`/api/cart?sessionId=${sessionId}`);
-      const data = await response.json();
-      
-      if (data.success && data.data) {
-        setCartItemCount(data.data.itemCount || 0);
-      }
-    } catch (error) {
-      console.error("Failed to fetch cart count:", error);
-    }
-  };
-
-  // Fetch cart count on mount and periodically
-  useEffect(() => {
-    if (sessionId) {
-      fetchCartCount();
-      // Optionally refresh count every 30 seconds
-      const interval = setInterval(fetchCartCount, 30000);
-      return () => clearInterval(interval);
-    }
-  }, [sessionId]);
-
-  // Listen for cart updates (you can trigger this from other components)
-  useEffect(() => {
-    const handleCartUpdate = () => {
-      fetchCartCount();
-    };
-
-    window.addEventListener('cartUpdated', handleCartUpdate);
-    return () => window.removeEventListener('cartUpdated', handleCartUpdate);
-  }, [sessionId]);
+  
+  // Use cart context - single source of truth
+  const { cart } = useCart(); // Remove sessionId since it's not needed here
+  const cartItemCount = cart?.totalItems || 0;
 
   const navLinks = [
     { href: "/", label: "Home", icon: Home },
@@ -130,7 +87,7 @@ export default function Navigation() {
 
           {/* Mobile Navigation Menu */}
           {isMenuOpen && (
-            <div className="md:hidden border-t border-yellow-500/20 absolute z-50 bg-[#101828] w-full">
+            <div className="md:hidden border-t border-yellow-500/20 absolute z-50 bg-[#101828] w-full left-0">
               <div className="px-2 pt-2 pb-3 space-y-1">
                 {navLinks.map((link) => {
                   const IconComponent = link.icon;
@@ -169,11 +126,10 @@ export default function Navigation() {
         </div>
       </nav>
 
-      {/* Cart Drawer */}
+      {/* Cart Drawer - REMOVE sessionId prop */}
       <CartDrawer
         isOpen={isCartOpen}
-        onClose={() => setIsCartOpen(false)}
-        sessionId={sessionId}
+        onCloseAction={() => setIsCartOpen(false)}
       />
     </>
   );

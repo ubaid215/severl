@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { jwtVerify, importSPKI, importPKCS8 } from 'jose'
+import { jwtVerify } from 'jose'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
-
-// Convert string secret to Uint8Array for jose
 const secret = new TextEncoder().encode(JWT_SECRET)
 
 // Routes that require admin authentication
@@ -26,11 +24,13 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const method = request.method
 
-  console.log(`🚀 Middleware hit: ${method} ${pathname}`)
+  // Only log non-GET requests to reduce noise
+  if (method !== 'GET') {
+    console.log(`🚀 Middleware: ${method} ${pathname}`)
+  }
 
   // Skip authentication for public routes
   if (pathname === '/api/auth' && method === 'POST') {
-    console.log('✅ Skipping auth for /api/auth POST')
     return NextResponse.next()
   }
 
@@ -44,18 +44,15 @@ export async function middleware(request: NextRequest) {
   ]
 
   if (method === 'GET' && publicGetRoutes.some(route => pathname.startsWith(route))) {
-    console.log('✅ Allowing public GET request')
     return NextResponse.next()
   }
 
   // Skip authentication for cart and order creation (public endpoints)
   if ((pathname === '/api/cart' || pathname === '/api/orders') && ['POST', 'DELETE'].includes(method)) {
-    console.log('✅ Allowing public cart/order request')
     return NextResponse.next()
   }
 
-  if (pathname.startsWith('/api/cart/') && ['PUT', 'DELETE'].includes(method)) {
-    console.log('✅ Allowing public cart item request')
+  if (pathname.startsWith('/api/cart/') && ['PUT', 'DELETE', 'PATCH'].includes(method)) {
     return NextResponse.next()
   }
 
@@ -65,19 +62,15 @@ export async function middleware(request: NextRequest) {
       pathname.match(path.replace('[id]', '[^/]+')) && methods.includes(method)
     )
 
-  console.log(`🔒 Requires admin: ${requiresAdmin}`)
-
   if (!requiresAdmin) {
-    console.log('✅ No admin required, allowing request')
     return NextResponse.next()
   }
 
   // Get authorization header
   const authHeader = request.headers.get('authorization')
-  console.log(`🔑 Auth header: ${authHeader ? 'Present' : 'Missing'}`)
   
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    console.log('❌ Missing or invalid authorization header')
+    console.log(`❌ ${method} ${pathname}: Missing auth`)
     return NextResponse.json(
       { error: 'Authorization token required' },
       { status: 401 }
@@ -85,23 +78,19 @@ export async function middleware(request: NextRequest) {
   }
 
   const token = authHeader.substring(7)
-  console.log(`🎫 Token: ${token.substring(0, 20)}...`)
 
   try {
     // Verify JWT token using jose (Edge Runtime compatible)
     const { payload } = await jwtVerify(token, secret)
-    console.log(`👤 Decoded user: ${payload.email}, role: ${payload.role}`)
     
     // Check if user has admin privileges
     if (!['ADMIN', 'SUPER_ADMIN'].includes(payload.role as string)) {
-      console.log('❌ Insufficient privileges')
+      console.log(`❌ ${method} ${pathname}: Insufficient privileges`)
       return NextResponse.json(
         { error: 'Admin privileges required' },
         { status: 403 }
       )
     }
-
-    console.log('✅ Admin authentication successful')
 
     // Add user info to request headers for controllers to use
     const response = NextResponse.next()
@@ -112,7 +101,7 @@ export async function middleware(request: NextRequest) {
     return response
 
   } catch (error) {
-    console.log('❌ JWT verification failed:', error)
+    console.log(`❌ ${method} ${pathname}: Invalid token`)
     return NextResponse.json(
       { error: 'Invalid or expired token' },
       { status: 401 }
