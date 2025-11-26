@@ -1,7 +1,7 @@
 "use client";
 
 import HeroCarousel from '@/components/common/HeroCarousel'
-import React, { useRef, useState } from 'react'
+import React, { useRef, useState, useCallback, useEffect } from 'react'
 import { Utensils, Star, Tag, ChevronLeft, ChevronRight } from 'lucide-react'
 import FoodCard from '@/components/menu/FoodCard'
 import { useRouter } from 'next/navigation'
@@ -34,6 +34,8 @@ function Page() {
   const { categories, foodItems, loading } = useData() // Use context data
   const [featuredScrollPosition, setFeaturedScrollPosition] = useState(0)
   const [dealsScrollPosition, setDealsScrollPosition] = useState(0)
+  const [featuredMaxScroll, setFeaturedMaxScroll] = useState(0)
+  const [dealsMaxScroll, setDealsMaxScroll] = useState(0)
   
   const featuredContainerRef = useRef<HTMLDivElement>(null)
   const dealsContainerRef = useRef<HTMLDivElement>(null)
@@ -74,46 +76,100 @@ function Page() {
     router.push('/menu')
   }
 
+  // Update max scroll values when items change
+  useEffect(() => {
+    const updateMaxScroll = () => {
+      if (featuredContainerRef.current) {
+        setFeaturedMaxScroll(
+          featuredContainerRef.current.scrollWidth - featuredContainerRef.current.clientWidth
+        )
+      }
+      if (dealsContainerRef.current) {
+        setDealsMaxScroll(
+          dealsContainerRef.current.scrollWidth - dealsContainerRef.current.clientWidth
+        )
+      }
+    }
+
+    updateMaxScroll()
+    // Update on window resize
+    window.addEventListener('resize', updateMaxScroll)
+    return () => window.removeEventListener('resize', updateMaxScroll)
+  }, [featuredItems.length, dealItems.length])
+
+  // Scroll handlers with debouncing
+  const handleFeaturedScroll = useCallback(() => {
+    if (featuredContainerRef.current) {
+      setFeaturedScrollPosition(featuredContainerRef.current.scrollLeft)
+    }
+  }, [])
+
+  const handleDealsScroll = useCallback(() => {
+    if (dealsContainerRef.current) {
+      setDealsScrollPosition(dealsContainerRef.current.scrollLeft)
+    }
+  }, [])
+
+  // Add scroll event listeners
+  useEffect(() => {
+    const featuredContainer = featuredContainerRef.current
+    const dealsContainer = dealsContainerRef.current
+
+    if (featuredContainer) {
+      featuredContainer.addEventListener('scroll', handleFeaturedScroll)
+    }
+    if (dealsContainer) {
+      dealsContainer.addEventListener('scroll', handleDealsScroll)
+    }
+
+    return () => {
+      if (featuredContainer) {
+        featuredContainer.removeEventListener('scroll', handleFeaturedScroll)
+      }
+      if (dealsContainer) {
+        dealsContainer.removeEventListener('scroll', handleDealsScroll)
+      }
+    }
+  }, [handleFeaturedScroll, handleDealsScroll])
+
   // Scroll functions
   const scrollFeatured = (direction: 'left' | 'right') => {
     if (!featuredContainerRef.current) return
     
     const container = featuredContainerRef.current
-    const scrollAmount = 400
+    const scrollAmount = container.clientWidth * 0.8 // Scroll 80% of container width
+    
     const newPosition = direction === 'left' 
       ? Math.max(0, featuredScrollPosition - scrollAmount)
-      : featuredScrollPosition + scrollAmount
+      : Math.min(featuredMaxScroll, featuredScrollPosition + scrollAmount)
     
     container.scrollTo({
       left: newPosition,
       behavior: 'smooth'
     })
-    setFeaturedScrollPosition(newPosition)
   }
 
   const scrollDeals = (direction: 'left' | 'right') => {
     if (!dealsContainerRef.current) return
     
     const container = dealsContainerRef.current
-    const scrollAmount = 400
+    const scrollAmount = container.clientWidth * 0.8 // Scroll 80% of container width
+    
     const newPosition = direction === 'left' 
       ? Math.max(0, dealsScrollPosition - scrollAmount)
-      : dealsScrollPosition + scrollAmount
+      : Math.min(dealsMaxScroll, dealsScrollPosition + scrollAmount)
     
     container.scrollTo({
       left: newPosition,
       behavior: 'smooth'
     })
-    setDealsScrollPosition(newPosition)
   }
 
   const canScrollFeaturedLeft = featuredScrollPosition > 0
-  const canScrollFeaturedRight = featuredContainerRef.current && 
-    featuredScrollPosition < featuredContainerRef.current.scrollWidth - featuredContainerRef.current.clientWidth
+  const canScrollFeaturedRight = featuredScrollPosition < featuredMaxScroll
 
   const canScrollDealsLeft = dealsScrollPosition > 0
-  const canScrollDealsRight = dealsContainerRef.current && 
-    dealsScrollPosition < dealsContainerRef.current.scrollWidth - dealsContainerRef.current.clientWidth
+  const canScrollDealsRight = dealsScrollPosition < dealsMaxScroll
 
   return (
     <div className="w-full min-h-screen bg-black text-white overflow-x-hidden">
@@ -213,8 +269,8 @@ function Page() {
                 <button
                   onClick={() => scrollFeatured('left')}
                   disabled={!canScrollFeaturedLeft}
-                  className={`absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-10 bg-black/80 hover:bg-black text-yellow-500 hover:text-yellow-400 p-3 sm:p-4 rounded-full shadow-2xl border border-yellow-500/20 transition-all duration-300 hover:scale-110 cursor-pointer flex items-center justify-center ${
-                    !canScrollFeaturedLeft ? 'opacity-50 cursor-not-allowed' : ''
+                  className={`absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-10 bg-black/80 hover:bg-black text-yellow-500 hover:text-yellow-400 p-3 sm:p-4 rounded-full shadow-2xl border border-yellow-500/20 transition-all duration-300 hover:scale-110 flex items-center justify-center ${
+                    !canScrollFeaturedLeft ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
                   }`}
                 >
                   <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -222,8 +278,8 @@ function Page() {
                 <button
                   onClick={() => scrollFeatured('right')}
                   disabled={!canScrollFeaturedRight}
-                  className={`absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-10 bg-black/80 hover:bg-black text-yellow-500 hover:text-yellow-400 p-3 sm:p-4 rounded-full shadow-2xl border border-yellow-500/20 transition-all duration-300 hover:scale-110 cursor-pointer flex items-center justify-center ${
-                    !canScrollFeaturedRight ? 'opacity-50 cursor-not-allowed' : ''
+                  className={`absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-10 bg-black/80 hover:bg-black text-yellow-500 hover:text-yellow-400 p-3 sm:p-4 rounded-full shadow-2xl border border-yellow-500/20 transition-all duration-300 hover:scale-110 flex items-center justify-center ${
+                    !canScrollFeaturedRight ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
                   }`}
                 >
                   <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -282,8 +338,8 @@ function Page() {
                 <button
                   onClick={() => scrollDeals('left')}
                   disabled={!canScrollDealsLeft}
-                  className={`absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-10 bg-black/80 hover:bg-black text-red-500 hover:text-red-400 p-3 sm:p-4 rounded-full shadow-2xl border border-red-500/20 transition-all duration-300 hover:scale-110 cursor-pointer flex items-center justify-center ${
-                    !canScrollDealsLeft ? 'opacity-50 cursor-not-allowed' : ''
+                  className={`absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-10 bg-black/80 hover:bg-black text-red-500 hover:text-red-400 p-3 sm:p-4 rounded-full shadow-2xl border border-red-500/20 transition-all duration-300 hover:scale-110 flex items-center justify-center ${
+                    !canScrollDealsLeft ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
                   }`}
                 >
                   <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -291,8 +347,8 @@ function Page() {
                 <button
                   onClick={() => scrollDeals('right')}
                   disabled={!canScrollDealsRight}
-                  className={`absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-10 bg-black/80 hover:bg-black text-red-500 hover:text-red-400 p-3 sm:p-4 rounded-full shadow-2xl border border-red-500/20 transition-all duration-300 hover:scale-110 cursor-pointer flex items-center justify-center ${
-                    !canScrollDealsRight ? 'opacity-50 cursor-not-allowed' : ''
+                  className={`absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-10 bg-black/80 hover:bg-black text-red-500 hover:text-red-400 p-3 sm:p-4 rounded-full shadow-2xl border border-red-500/20 transition-all duration-300 hover:scale-110 flex items-center justify-center ${
+                    !canScrollDealsRight ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
                   }`}
                 >
                   <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
