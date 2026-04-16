@@ -18,7 +18,7 @@ export default function Footer() {
   const currentYear = new Date().getFullYear();
 
   return (
-    <footer className="bg-[#101828] border-t-2 border-yellow-500/20 mt-auto">
+    <footer className="bg-[#1A1C20] border-t-2 border-yellow-500/20 mt-auto">
       <div className="max-w-7xl mx-auto px-4 py-8 lg:py-12">
         {/* Mobile Layout */}
         <div className="block lg:hidden">

@@ -1,5 +1,8 @@
+// models/order.ts
 import { prisma } from '../app/lib/prisma'
 import { OrderStatus, PaymentStatus, PaymentMethod } from '@prisma/client'
+
+// ─── Interfaces ───────────────────────────────────────────────────────────────
 
 export interface CreateOrderData {
   customerName: string
@@ -10,7 +13,7 @@ export interface CreateOrderData {
   longitude?: number
   distance?: number
   sessionId: string
-  paymentMethod?: PaymentMethod // ✅ Use the actual enum type
+  paymentMethod?: PaymentMethod
   notes?: string
   dealId?: string
 }
@@ -22,6 +25,51 @@ export interface UpdateOrderData {
   notes?: string
 }
 
+// ─── Shared select shapes ─────────────────────────────────────────────────────
+
+const orderItemSelect = {
+  id: true,
+  quantity: true,
+  price: true,
+  total: true,
+  variantId: true,
+  variantLabel: true,
+  foodItem: {
+    select: {
+      id: true,
+      name: true,
+      image: true,
+      category: { select: { id: true, name: true } },
+    },
+  },
+} as const
+
+const orderSelect = {
+  id: true,
+  orderNumber: true,
+  customerName: true,
+  customerPhone: true,
+  customerEmail: true,
+  deliveryAddress: true,
+  latitude: true,
+  longitude: true,
+  distance: true,
+  subtotal: true,
+  deliveryCharges: true,
+  discount: true,
+  total: true,
+  status: true,
+  paymentStatus: true,
+  paymentMethod: true,
+  notes: true,
+  estimatedTime: true,
+  createdAt: true,
+  updatedAt: true,
+  items: { select: orderItemSelect },
+} as const
+
+// ─── OrderModel ───────────────────────────────────────────────────────────────
+
 export class OrderModel {
   static generateOrderNumber(): string {
     const timestamp = Date.now().toString().slice(-6)
@@ -30,57 +78,63 @@ export class OrderModel {
   }
 
   static calculateDeliveryCharges(distance: number): number {
-    if (distance <= 4) {
-      return 0 // Free delivery
-    } else if (distance <= 6) {
-      return 50 // 4-6km: 50 rupees
-    } else {
-      return 120 // Above 6km: 120 rupees
-    }
+    if (distance <= 4) return 0
+    if (distance <= 6) return 50
+    return 120
   }
 
   static async create(data: CreateOrderData) {
     const { sessionId, dealId, ...orderData } = data
 
-    // Get cart items
+    // Fetch cart with variant info so we can snapshot variant labels
     const cart = await prisma.cart.findUnique({
       where: { sessionId },
-      include: {
+      select: {
+        id: true,
         items: {
-          include: {
-            foodItem: true
-          }
-        }
-      }
+          select: {
+            foodItemId: true,
+            variantId: true,
+            quantity: true,
+            price: true,
+            variant: { select: { label: true } },
+          },
+        },
+      },
     })
 
-    if (!cart || cart.items.length === 0) {
-      throw new Error('Cart is empty')
-    }
+    if (!cart || cart.items.length === 0) throw new Error('Cart is empty')
 
-    // Calculate subtotal
-    const subtotal = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+    const subtotal = cart.items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+    const deliveryCharges = this.calculateDeliveryCharges(data.distance ?? 0)
 
-    // Calculate delivery charges
-    const deliveryCharges = this.calculateDeliveryCharges(data.distance || 0)
-
-    // Calculate discount if deal is applied
+    // Resolve discount — only hit DB if a dealId was provided
     let discount = 0
     if (dealId) {
       const deal = await prisma.specialDeal.findUnique({
-        where: { id: dealId }
+        where: { id: dealId },
+        select: {
+          isActive: true,
+          validFrom: true,
+          validTo: true,
+          minOrderAmount: true,
+          discountType: true,
+          discount: true,
+        },
       })
 
-      if (deal && deal.isActive) {
+      if (deal?.isActive) {
         const now = new Date()
-        if (deal.validFrom <= now && deal.validTo >= now) {
-          if (!deal.minOrderAmount || subtotal >= deal.minOrderAmount) {
-            if (deal.discountType === 'PERCENTAGE') {
-              discount = (subtotal * deal.discount) / 100
-            } else {
-              discount = deal.discount
-            }
-          }
+        const eligible =
+          deal.validFrom <= now &&
+          deal.validTo >= now &&
+          (!deal.minOrderAmount || subtotal >= deal.minOrderAmount)
+
+        if (eligible) {
+          discount =
+            deal.discountType === 'PERCENTAGE'
+              ? (subtotal * deal.discount) / 100
+              : deal.discount
         }
       }
     }
@@ -88,9 +142,7 @@ export class OrderModel {
     const total = subtotal + deliveryCharges - discount
     const orderNumber = this.generateOrderNumber()
 
-    // Create order in transaction
     return await prisma.$transaction(async (tx) => {
-      // Create order with proper paymentMethod
       const order = await tx.order.create({
         data: {
           ...orderData,
@@ -99,72 +151,41 @@ export class OrderModel {
           deliveryCharges,
           discount,
           total,
-          paymentMethod: orderData.paymentMethod || PaymentMethod.CASH_ON_DELIVERY, // ✅ Use default from schema
-        }
-      })
-
-      // Create order items
-      const orderItems = await Promise.all(
-        cart.items.map(item =>
-          tx.orderItem.create({
-            data: {
-              orderId: order.id,
+          paymentMethod: orderData.paymentMethod ?? PaymentMethod.CASH_ON_DELIVERY,
+          items: {
+            create: cart.items.map((item) => ({
               foodItemId: item.foodItemId,
+              // Persist the variant reference and snapshot its label
+              variantId: item.variantId ?? null,
+              variantLabel: item.variant?.label ?? null,
               quantity: item.quantity,
               price: item.price,
-              total: item.price * item.quantity
-            }
-          })
-        )
-      )
-
-      // Clear cart
-      await tx.cartItem.deleteMany({
-        where: { cartId: cart.id }
+              total: item.price * item.quantity,
+            })),
+          },
+        },
+        select: orderSelect,
       })
 
-      // Return order with items
-      return await tx.order.findUnique({
-        where: { id: order.id },
-        include: {
-          items: {
-            include: {
-              foodItem: {
-                include: {
-                  category: true
-                }
-              }
-            }
-          }
-        }
-      })
+      await tx.cartItem.deleteMany({ where: { cartId: cart.id } })
+
+      return order
     })
   }
 
   static async getAll(page = 1, limit = 20, status?: OrderStatus) {
     const skip = (page - 1) * limit
-
     const where = status ? { status } : {}
 
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
         where,
-        include: {
-          items: {
-            include: {
-              foodItem: {
-                include: {
-                  category: true
-                }
-              }
-            }
-          }
-        },
+        select: orderSelect,
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
       }),
-      prisma.order.count({ where })
+      prisma.order.count({ where }),
     ])
 
     return {
@@ -173,110 +194,63 @@ export class OrderModel {
         page,
         limit,
         total,
-        pages: Math.ceil(total / limit)
-      }
+        pages: Math.ceil(total / limit),
+      },
     }
   }
 
   static async getById(id: string) {
-    return await prisma.order.findUnique({
-      where: { id },
-      include: {
-        items: {
-          include: {
-            foodItem: {
-              include: {
-                category: true
-              }
-            }
-          }
-        }
-      }
-    })
+    return await prisma.order.findUnique({ where: { id }, select: orderSelect })
   }
 
   static async getByOrderNumber(orderNumber: string) {
-    return await prisma.order.findUnique({
-      where: { orderNumber },
-      include: {
-        items: {
-          include: {
-            foodItem: {
-              include: {
-                category: true
-              }
-            }
-          }
-        }
-      }
-    })
+    return await prisma.order.findUnique({ where: { orderNumber }, select: orderSelect })
   }
 
   static async updateStatus(id: string, data: UpdateOrderData) {
     return await prisma.order.update({
       where: { id },
       data,
-      include: {
-        items: {
-          include: {
-            foodItem: {
-              include: {
-                category: true
-              }
-            }
-          }
-        }
-      }
+      select: orderSelect,
     })
   }
 
   static async getOrderAnalytics(startDate?: Date, endDate?: Date) {
     const where = {
-      ...(startDate && endDate && {
-        createdAt: {
-          gte: startDate,
-          lte: endDate
-        }
-      })
+      ...(startDate && endDate && { createdAt: { gte: startDate, lte: endDate } }),
     }
 
-    const [
-      totalOrders,
-      totalRevenue,
-      ordersByStatus,
-      averageOrderValue
-    ] = await Promise.all([
+    const [totalOrders, totalRevenue, ordersByStatus, averageOrderValue] = await Promise.all([
       prisma.order.count({ where }),
       prisma.order.aggregate({
         where: { ...where, status: { not: 'CANCELLED' } },
-        _sum: { total: true }
+        _sum: { total: true },
       }),
-      prisma.order.groupBy({
-        by: ['status'],
-        where,
-        _count: { status: true }
-      }),
+      prisma.order.groupBy({ by: ['status'], where, _count: { status: true } }),
       prisma.order.aggregate({
         where: { ...where, status: { not: 'CANCELLED' } },
-        _avg: { total: true }
-      })
+        _avg: { total: true },
+      }),
     ])
 
     return {
       totalOrders,
-      totalRevenue: totalRevenue._sum.total || 0,
-      averageOrderValue: averageOrderValue._avg.total || 0,
-      ordersByStatus
+      totalRevenue: totalRevenue._sum.total ?? 0,
+      averageOrderValue: averageOrderValue._avg.total ?? 0,
+      ordersByStatus,
     }
   }
 
   static generateWhatsAppMessage(order: any): string {
-    const items = order.items.map((item: any) => 
-      `• ${item.foodItem.name} x${item.quantity} - Rs.${item.total}`
-    ).join('\n')
+    const items = order.items
+      .map((item: any) => {
+        const variantSuffix = item.variantLabel ? ` (${item.variantLabel})` : ''
+        return `• ${item.foodItem.name}${variantSuffix} x${item.quantity} - Rs.${item.total}`
+      })
+      .join('\n')
 
     return `🍽️ *Order Confirmation*
-    
+
 📋 *Order #:* ${order.orderNumber}
 👤 *Customer:* ${order.customerName}
 📞 *Phone:* ${order.customerPhone}

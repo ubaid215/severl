@@ -6,8 +6,14 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 interface CartItem {
   id: string
   foodItemId: string
+  variantId?: string
   quantity: number
-  price: number
+  price: number // This should be the actual price (variant price)
+  variant?: {
+    id: string
+    label: string
+    price: number
+  }
   foodItem: {
     id: string
     name: string
@@ -136,19 +142,40 @@ export function useOptimizedCart() {
 
           if (data.success && data.data) {
             // Transform data to match our Cart interface
+            // IMPORTANT: Use the item's price from the API (which should be the variant price)
             cartData = {
-              items: data.data.items?.map((item: any) => ({
-                id: item.id,
-                foodItemId: item.foodItemId,
-                quantity: item.quantity,
-                price: item.foodItem?.price || 0,
-                foodItem: {
-                  id: item.foodItem?.id || item.foodItemId,
-                  name: item.foodItem?.name || 'Unknown Item',
-                  image: item.foodItem?.image,
-                  price: item.foodItem?.price || 0
+              items: data.data.items?.map((item: any) => {
+                // Determine the correct price: item.price (from cart) > variant.price > foodItem.price
+                let itemPrice = item.price
+                if (!itemPrice && item.variant?.price) {
+                  itemPrice = item.variant.price
                 }
-              })) || [],
+                if (!itemPrice && item.foodItem?.price) {
+                  itemPrice = item.foodItem.price
+                }
+                
+                console.log(`💰 Item ${item.foodItem?.name}:`, {
+                  cartItemPrice: item.price,
+                  variantPrice: item.variant?.price,
+                  foodItemPrice: item.foodItem?.price,
+                  finalPrice: itemPrice
+                })
+                
+                return {
+                  id: item.id,
+                  foodItemId: item.foodItemId,
+                  variantId: item.variantId,
+                  quantity: item.quantity,
+                  price: itemPrice, // Use the actual price from cart/variant
+                  variant: item.variant,
+                  foodItem: {
+                    id: item.foodItem?.id || item.foodItemId,
+                    name: item.foodItem?.name || 'Unknown Item',
+                    image: item.foodItem?.image,
+                    price: item.foodItem?.price || 0
+                  }
+                }
+              }) || [],
               totalItems: data.data.itemCount || 0,
               totalPrice: data.data.subtotal || 0
             }
@@ -167,7 +194,16 @@ export function useOptimizedCart() {
             setLoading(false)
           }
 
-          console.log('✅ Cart data updated:', cartData)
+          console.log('✅ Cart data updated:', {
+            itemsCount: cartData.items.length,
+            totalPrice: cartData.totalPrice,
+            items: cartData.items.map(i => ({
+              name: i.foodItem.name,
+              price: i.price,
+              quantity: i.quantity,
+              variant: i.variant?.label
+            }))
+          })
           resolve(cartData)
         } catch (error) {
           console.error('❌ Error fetching cart:', error)
@@ -179,7 +215,7 @@ export function useOptimizedCart() {
         } finally {
           globalFetchPromise = null
         }
-      }, 100) // Reduced debounce to 100ms for faster sync
+      }, 100)
     })
 
     try {
@@ -221,8 +257,8 @@ export function useOptimizedCart() {
     }
   }, [sessionId, fetchCart])
 
-  // Enhanced add to cart with immediate cache invalidation
-  const addToCart = useCallback(async (foodItemId: string, quantity: number = 1) => {
+  // FIXED: Enhanced add to cart with variantId support and price handling
+  const addToCart = useCallback(async (foodItemId: string, quantity: number = 1, variantId?: string) => {
     if (!sessionId) {
       console.error('❌ No session ID available')
       return
@@ -232,16 +268,23 @@ export function useOptimizedCart() {
       // Immediately invalidate cache
       globalCartCache.timestamp = 0
       
-      console.log('🛒 Adding item to cart:', { foodItemId, quantity, sessionId })
+      console.log('🛒 Adding item to cart:', { foodItemId, quantity, variantId, sessionId })
+
+      // Build request body - only include variantId if provided
+      const requestBody: any = { 
+        sessionId, 
+        foodItemId, 
+        quantity 
+      }
+      
+      if (variantId) {
+        requestBody.variantId = variantId
+      }
 
       const response = await fetch('/api/cart', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          sessionId, 
-          foodItemId, 
-          quantity 
-        })
+        body: JSON.stringify(requestBody)
       })
 
       if (!response.ok) {
@@ -253,12 +296,19 @@ export function useOptimizedCart() {
       console.log('✅ Add to cart response:', data)
       
       if (data.success) {
-        // Fetch updated cart immediately
-        await fetchCart(true)
+        // Fetch updated cart immediately to get the correct price
+        const updatedCart = await fetchCart(true)
+        
+        // Log the added item price for verification
+        const addedItem = updatedCart?.items.find(item => item.foodItemId === foodItemId)
+        if (addedItem) {
+          console.log(`💰 Item "${addedItem.foodItem.name}" added with price: ${addedItem.price}`, 
+            addedItem.variant ? `(Variant: ${addedItem.variant.label})` : '(No variant)')
+        }
         
         // Trigger multiple update methods for maximum compatibility
         window.dispatchEvent(new CustomEvent('cartUpdated', { 
-          detail: { source: 'addToCart', foodItemId, quantity } 
+          detail: { source: 'addToCart', foodItemId, quantity, variantId } 
         }))
         
         // Also update localStorage as a backup sync method
@@ -272,6 +322,7 @@ export function useOptimizedCart() {
       console.error('❌ Error adding to cart:', error)
       // Even on error, refresh cart to ensure sync
       await fetchCart(true)
+      throw error // Re-throw so FoodCard can handle it
     }
   }, [sessionId, fetchCart])
 

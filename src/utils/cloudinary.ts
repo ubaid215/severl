@@ -29,7 +29,7 @@ export const uploadToCloudinary = async (
         const uploadStream = cloudinary.uploader.upload_stream(
           {
             resource_type: "auto",
-            folder: "food-app",
+            folder: "several-images",
             timeout: 60000, // 60 second timeout
           },
           (error?: UploadApiErrorResponse, result?: UploadApiResponse) => {
@@ -60,7 +60,7 @@ export const uploadToCloudinary = async (
     // If file is a base64 string
     if (typeof file === "string" && file.startsWith("data:")) {
       const result = await cloudinary.uploader.upload(file, {
-        folder: "food-app",
+        folder: "several-images",
         timeout: 60000,
       });
       return result.secure_url;

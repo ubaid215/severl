@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -46,7 +47,7 @@ interface KPICardProps {
 
 function KPICard({ title, value, change, changeType, icon }: KPICardProps) {
   return (
-    <div className="bg-gray-900 rounded-lg p-6">
+    <div className="bg-[#1A1C20] rounded-lg p-6">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-gray-400 text-sm font-medium">{title}</p>
@@ -86,46 +87,31 @@ export default function AnalyticsPage() {
   }, [dateRange]);
 
   const fetchAnalytics = async () => {
-    try {
-      setRefreshing(true);
-      const token = localStorage.getItem('admin_token');
-      
-      // Fetch main analytics
-      const analyticsResponse = await fetch(
-        `/api/orders/analytics?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-      
-      // Fetch revenue report
-      const revenueResponse = await fetch(
-        `/api/orders/analytics/reveneu?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
+  setRefreshing(true);
+  const token = localStorage.getItem('admin_token');
+  const headers = { Authorization: `Bearer ${token}` };
+  const base = `/api/orders/analytics?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`;
 
-      const analyticsResult = await analyticsResponse.json();
-      const revenueResult = await revenueResponse.json();
+  try {
+    const [analyticsRes, revenueRes] = await Promise.all([
+      fetch(base, { headers }),
+      fetch(`${base.replace('analytics', 'analytics/reveneu')}`, { headers }),
+    ]);
+    const [analyticsResult, revenueResult] = await Promise.all([
+      analyticsRes.json(),
+      revenueRes.json(),
+    ]);
 
-      if (analyticsResult.analytics && revenueResult.report) {
-        setAnalyticsData({
-          ...analyticsResult.analytics,
-          revenueReport: revenueResult.report
-        });
-      }
-    } catch (error) {
-      console.error('Error fetching analytics:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+    if (analyticsResult.analytics && revenueResult.report) {
+      setAnalyticsData({ ...analyticsResult.analytics, revenueReport: revenueResult.report });
     }
-  };
+  } catch (err) {
+    console.error(err);
+  } finally {
+    setLoading(false);
+    setRefreshing(false);
+  }
+};
 
   const handleDateRangeChange = (field: 'startDate' | 'endDate', value: string) => {
     setDateRange(prev => ({
@@ -176,13 +162,30 @@ export default function AnalyticsPage() {
     orders: item.orders
   })) || [];
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500"></div>
+  function SkeletonCard() {
+  return (
+    <div className="bg-[#1A1C20] rounded-lg p-6 animate-pulse">
+      <div className="h-3 bg-gray-700 rounded w-1/2 mb-3" />
+      <div className="h-7 bg-gray-700 rounded w-3/4" />
+    </div>
+  );
+}
+
+// In the JSX, replace the loading spinner with:
+if (loading) return (
+  <div className="min-h-screen bg-black text-white p-4 md:p-8">
+    <div className="max-w-7xl mx-auto">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        {Array(4).fill(0).map((_, i) => <SkeletonCard key={i} />)}
       </div>
-    );
-  }
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {Array(2).fill(0).map((_, i) => (
+          <div key={i} className="bg-[#1A1C20] rounded-lg p-6 h-96 animate-pulse" />
+        ))}
+      </div>
+    </div>
+  </div>
+);
 
   return (
     <div className="min-h-screen bg-black text-white p-4 md:p-8">
@@ -196,7 +199,7 @@ export default function AnalyticsPage() {
           
           <div className="flex flex-col sm:flex-row gap-4 mt-4 sm:mt-0">
             {/* Date Range Filter */}
-            <div className="flex items-center border-2 border-yellow-500 space-x-2 bg-gray-900 rounded-lg p-2">
+            <div className="flex items-center border-2 border-yellow-500 space-x-2 bg-[#1A1C20] rounded-lg p-2">
               <Calendar size={16} className="text-gray-200" />
               <input
                 type="date"
@@ -271,7 +274,7 @@ export default function AnalyticsPage() {
             {/* Charts Row 1 */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
               {/* Revenue Trend Chart */}
-              <div className="bg-gray-900 rounded-lg p-6">
+              <div className="bg-[#1A1C20] rounded-lg p-6">
                 <h3 className="text-xl font-semibold text-white mb-4">Revenue Trend</h3>
                 <div className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
@@ -314,7 +317,7 @@ export default function AnalyticsPage() {
               </div>
 
               {/* Orders by Status */}
-              <div className="bg-gray-900 rounded-lg p-6">
+              <div className="bg-[#1A1C20] rounded-lg p-6">
                 <h3 className="text-xl font-semibold text-white mb-4">Orders by Status</h3>
                 <div className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
@@ -348,7 +351,7 @@ export default function AnalyticsPage() {
             {/* Charts Row 2 */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
               {/* Daily Orders */}
-              <div className="bg-gray-900 rounded-lg p-6">
+              <div className="bg-[#1A1C20] rounded-lg p-6">
                 <h3 className="text-xl font-semibold text-white mb-4">Daily Orders</h3>
                 <div className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
@@ -383,7 +386,7 @@ export default function AnalyticsPage() {
               </div>
 
               {/* Payment Methods */}
-              <div className="bg-gray-900 rounded-lg p-6">
+              <div className="bg-[#1A1C20] rounded-lg p-6">
                 <h3 className="text-xl font-semibold text-white mb-4">Payment Methods</h3>
                 <div className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
@@ -415,7 +418,7 @@ export default function AnalyticsPage() {
             </div>
 
             {/* Summary Stats */}
-            <div className="bg-gray-900 rounded-lg p-6">
+            <div className="bg-[#1A1C20] rounded-lg p-6">
               <h3 className="text-xl font-semibold text-white mb-6">Summary Statistics</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="text-center">

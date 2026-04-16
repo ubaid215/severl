@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { 
-  ArrowLeft, 
-  Printer, 
-  Download, 
+import {
+  ArrowLeft,
+  Printer,
+  Download,
   MessageCircle,
   CheckCircle,
   XCircle,
@@ -35,6 +35,8 @@ interface Order {
     quantity: number;
     price: number;
     total: number;
+    variantId?: string | null;     // ✅ ADDED
+    variantLabel?: string | null;  // ✅ ADDED
     foodItem: {
       name: string;
       image?: string;
@@ -52,25 +54,17 @@ export default function OrderDetailPage() {
   const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
-    if (id) {
-      fetchOrder();
-    }
+    if (id) fetchOrder();
   }, [id]);
 
   const fetchOrder = async () => {
     try {
       const token = localStorage.getItem('admin_token');
       const response = await fetch(`/api/orders/${id}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
-      
       const data = await response.json();
-      
-      if (data.order) {
-        setOrder(data.order);
-      }
+      if (data.order) setOrder(data.order);
     } catch (error) {
       console.error('Error fetching order:', error);
     } finally {
@@ -86,14 +80,11 @@ export default function OrderDetailPage() {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ status: newStatus }),
       });
-
-      if (response.ok) {
-        setOrder(prev => prev ? { ...prev, status: newStatus } : null);
-      }
+      if (response.ok) setOrder(prev => prev ? { ...prev, status: newStatus } : null);
     } catch (error) {
       console.error('Error updating order status:', error);
     } finally {
@@ -109,14 +100,11 @@ export default function OrderDetailPage() {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ paymentStatus: newStatus }),
       });
-
-      if (response.ok) {
-        setOrder(prev => prev ? { ...prev, paymentStatus: newStatus } : null);
-      }
+      if (response.ok) setOrder(prev => prev ? { ...prev, paymentStatus: newStatus } : null);
     } catch (error) {
       console.error('Error updating payment status:', error);
     } finally {
@@ -124,10 +112,8 @@ export default function OrderDetailPage() {
     }
   };
 
-  const shareOrderWithRider = async () => {
+  const shareOrderWithRider = () => {
     if (!order) return;
-
-    // Create detailed order message for rider
     const orderDetails = `
 🛵 NEW DELIVERY ORDER
 
@@ -141,7 +127,10 @@ Phone: ${order.customerPhone}
 ${order.distance ? `📏 Distance: ${order.distance} km` : ''}
 
 🍽️ ORDER ITEMS:
-${order.items.map(item => `• ${item.quantity}x ${item.foodItem.name}`).join('\n')}
+${order.items.map(item => {
+  const sizeSuffix = item.variantLabel ? ` (${item.variantLabel})` : '';
+  return `• ${item.quantity}x ${item.foodItem.name}${sizeSuffix} — Rs ${item.total}`;
+}).join('\n')}
 
 💰 PAYMENT:
 Method: ${order.paymentMethod.replace(/_/g, ' ')}
@@ -153,11 +142,7 @@ ${order.notes ? `📝 SPECIAL NOTES:\n${order.notes}` : ''}
 ⏰ Status: ${order.status.replace(/_/g, ' ')}
 `.trim();
 
-    const encodedMessage = encodeURIComponent(orderDetails);
-    const whatsappUrl = `https://wa.me/?text=${encodedMessage}`;
-    
-    // Open WhatsApp with the message
-    window.open(whatsappUrl, '_blank');
+    window.open(`https://wa.me/?text=${encodeURIComponent(orderDetails)}`, '_blank');
   };
 
   const getStatusIcon = (status: string) => {
@@ -173,20 +158,16 @@ ${order.notes ? `📝 SPECIAL NOTES:\n${order.notes}` : ''}
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+  const formatDate = (dateString: string) =>
+    new Date(dateString).toLocaleDateString('en-IN', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
     });
-  };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500" />
       </div>
     );
   }
@@ -211,6 +192,7 @@ ${order.notes ? `📝 SPECIAL NOTES:\n${order.notes}` : ''}
   return (
     <div className="min-h-screen bg-black text-white p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
+
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <button
@@ -220,7 +202,6 @@ ${order.notes ? `📝 SPECIAL NOTES:\n${order.notes}` : ''}
             <ArrowLeft size={20} className="mr-2" />
             Back to Orders
           </button>
-          
           <div className="flex space-x-2">
             <button
               onClick={() => window.open(`/api/orders/${id}/slip?format=thermal`, '_blank')}
@@ -240,25 +221,29 @@ ${order.notes ? `📝 SPECIAL NOTES:\n${order.notes}` : ''}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
           {/* Order Details */}
           <div className="lg:col-span-2">
             <div className="bg-gray-900 rounded-lg p-6 mb-6">
               <h2 className="text-2xl font-bold text-yellow-500 mb-4">Order #{order.orderNumber}</h2>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 <div>
                   <h3 className="text-lg font-semibold text-white mb-2">Order Information</h3>
                   <div className="space-y-2 text-sm">
                     <p><span className="text-gray-400">Date:</span> {formatDate(order.createdAt)}</p>
-                    <p><span className="text-gray-400">Status:</span> 
+                    <p>
+                      <span className="text-gray-400">Status:</span>
                       <span className="ml-2 capitalize">{order.status.toLowerCase().replace(/_/g, ' ')}</span>
                     </p>
-                    <p><span className="text-gray-400">Payment:</span> 
-                      <span className="ml-2 capitalize">{order.paymentStatus.toLowerCase()} ({order.paymentMethod.toLowerCase().replace(/_/g, ' ')})</span>
+                    <p>
+                      <span className="text-gray-400">Payment:</span>
+                      <span className="ml-2 capitalize">
+                        {order.paymentStatus.toLowerCase()} ({order.paymentMethod.toLowerCase().replace(/_/g, ' ')})
+                      </span>
                     </p>
                   </div>
                 </div>
-
                 <div>
                   <h3 className="text-lg font-semibold text-white mb-2">Customer Information</h3>
                   <div className="space-y-2 text-sm">
@@ -275,16 +260,32 @@ ${order.notes ? `📝 SPECIAL NOTES:\n${order.notes}` : ''}
                 </div>
               </div>
 
-              {/* Order Items */}
+              {/* ✅ Order Items — now shows size/variant label */}
               <h3 className="text-lg font-semibold text-white mb-4">Order Items</h3>
               <div className="space-y-3">
                 {order.items.map((item, index) => (
-                  <div key={index} className="flex justify-between items-center p-3 bg-gray-800 rounded-lg">
-                    <div>
-                      <p className="font-medium text-white">{item.foodItem.name}</p>
-                      <p className="text-sm text-gray-400">Rs {item.price} × {item.quantity}</p>
+                  <div
+                    key={index}
+                    className="flex justify-between items-start p-3 bg-gray-800 rounded-lg"
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-medium text-white">{item.foodItem.name}</p>
+                        {/* ✅ Size badge — visible only when variant exists */}
+                        {item.variantLabel && (
+                          <span className="inline-flex items-center gap-1 bg-yellow-500/15 text-yellow-400 border border-yellow-500/30 px-2 py-0.5 rounded-full text-xs font-semibold">
+                            📏 {item.variantLabel}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-400 mt-0.5">
+                        Rs {item.price} × {item.quantity}
+                        {item.variantLabel && (
+                          <span className="text-gray-500 ml-1">({item.variantLabel} price)</span>
+                        )}
+                      </p>
                     </div>
-                    <p className="font-semibold text-white">Rs {item.total}</p>
+                    <p className="font-semibold text-white ml-4">Rs {item.total}</p>
                   </div>
                 ))}
               </div>
@@ -374,7 +375,12 @@ ${order.notes ? `📝 SPECIAL NOTES:\n${order.notes}` : ''}
                 <h4 className="text-sm font-medium text-gray-400 mb-3">Quick Actions</h4>
                 <div className="space-y-2">
                   <button
-                    onClick={() => window.open(`https://wa.me/${order.customerPhone}?text=Hello ${order.customerName}, regarding your order #${order.orderNumber}`, '_blank')}
+                    onClick={() =>
+                      window.open(
+                        `https://wa.me/${order.customerPhone}?text=Hello ${order.customerName}, regarding your order #${order.orderNumber}`,
+                        '_blank'
+                      )
+                    }
                     className="w-full flex items-center bg-green-600 text-white p-2 rounded-lg hover:bg-green-700 transition-colors"
                   >
                     <MessageCircle size={16} className="mr-2" />

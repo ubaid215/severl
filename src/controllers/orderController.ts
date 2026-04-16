@@ -1,1269 +1,968 @@
-import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/app/lib/prisma";
-import { CartModel } from "@/models/cart";
+// controllers/orderController.ts
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/app/lib/prisma'
+import { CartModel } from '@/models/cart'
 
-// Interfaces for type safety
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface OrderItem {
+  foodItemId: string
+  quantity: number
+  variantId?: string
+}
+
 interface CreateOrderInput {
-  sessionId: string; // Add this line
-  customerName: string;
-  customerPhone: string;
-  customerEmail?: string;
-  deliveryAddress: string;
-  latitude?: number;
-  longitude?: number;
-  items: Array<{
-    foodItemId: string;
-    quantity: number;
-  }>;
-  paymentMethod?:
-    | "CASH_ON_DELIVERY"
-    | "CREDIT_CARD"
-    | "DEBIT_CARD"
-    | "PAYPAL"
-    | "STRIPE";
-  notes?: string;
-}
-
-interface GetOrdersFilters {
-  page?: number;
-  limit?: number;
-  status?:
-    | "PENDING"
-    | "CONFIRMED"
-    | "PREPARING"
-    | "READY"
-    | "OUT_FOR_DELIVERY"
-    | "DELIVERED"
-    | "CANCELLED";
-  dateFrom?: Date;
-  dateTo?: Date;
-}
-
-// Helper function to calculate delivery charge
-function calculateDeliveryCharge(distance: number): number {
-  if (distance <= 4) {
-    return 0; // Free delivery within 4km
-  } else if (distance > 4 && distance <= 6) {
-    return 50; // 50 rupees for 4-6km
-  } else {
-    return 120; // 120 rupees for above 6km
-  }
-}
-
-// Helper function to calculate distance (simplified for demo)
-function calculateDistance(
-  restaurantLocation: string,
-  deliveryAddress: string,
-  latitude?: number,
+  sessionId: string
+  customerName: string
+  customerPhone: string
+  customerEmail?: string
+  deliveryAddress: string
+  latitude?: number
   longitude?: number
-): number {
-  // If coordinates are provided, use simplified calculation
-  if (latitude && longitude) {
-    // Restaurant coordinates (should come from database or config)
-    const restaurantLat = 31.391427; // FSD coordinates
-    const restaurantLng = 72.991881;
+  items: OrderItem[]
+  paymentMethod?: 'CASH_ON_DELIVERY' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'PAYPAL' | 'STRIPE'
+  notes?: string
+}
 
-    // Simplified distance calculation (for demo purposes)
-    // In a real app, use Haversine formula
-    const latDiff = Math.abs(latitude - restaurantLat);
-    const lngDiff = Math.abs(longitude - restaurantLng);
-    const distance = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff) * 111; // Approx km per degree
+const VALID_STATUSES = [
+  'PENDING', 'CONFIRMED', 'PREPARING', 'READY',
+  'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED',
+] as const
 
-    return Math.round(distance * 10) / 10; // Round to 1 decimal place
+const VALID_PAYMENT_STATUSES = ['PENDING', 'PAID', 'FAILED', 'REFUNDED'] as const
+
+// ─── Shared order select ──────────────────────────────────────────────────────
+
+const orderSelect = {
+  id: true,
+  orderNumber: true,
+  customerName: true,
+  customerPhone: true,
+  customerEmail: true,
+  deliveryAddress: true,
+  latitude: true,
+  longitude: true,
+  distance: true,
+  subtotal: true,
+  deliveryCharges: true,
+  discount: true,
+  total: true,
+  status: true,
+  paymentStatus: true,
+  paymentMethod: true,
+  notes: true,
+  estimatedTime: true,
+  createdAt: true,
+  items: {
+    select: {
+      id: true,
+      quantity: true,
+      price: true,
+      total: true,
+      variantId: true,      // ✅ ADDED
+      variantLabel: true,   // ✅ ADDED — for success page display
+      foodItem: {
+        select: { id: true, name: true, image: true },
+      },
+    },
+  },
+} as const
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function calculateDistance(lat?: number, lng?: number): number {
+  if (lat && lng) {
+    const restaurantLat = 31.391427
+    const restaurantLng = 72.991881
+    const latDiff = Math.abs(lat - restaurantLat)
+    const lngDiff = Math.abs(lng - restaurantLng)
+    return Math.round(Math.sqrt(latDiff ** 2 + lngDiff ** 2) * 111 * 10) / 10
   }
-
-  // Fallback: For demo purposes, return a random distance between 1-10km
-  return Math.floor(Math.random() * 10) + 1;
+  return 0  // for now delivery is free
 }
 
-// Helper function to generate order number
 function generateOrderNumber(): string {
-  const timestamp = Date.now().toString(36).slice(-4); // Last 4 chars
-  const randomStr = Math.random().toString(36).substring(2, 6); // 4 random chars
-  return `ORD-${timestamp}${randomStr}`.toUpperCase();
+  const ts = Date.now().toString(36).slice(-4)
+  const rand = Math.random().toString(36).substring(2, 6)
+  return `ORD-${ts}${rand}`.toUpperCase()
 }
+
+// ─── Controller ───────────────────────────────────────────────────────────────
 
 export class OrderController {
-  static calculateDelivery(req: NextRequest) {
-    throw new Error("Method not implemented.");
-  }
-  // Create a new order
+  // POST /api/orders
   static async createOrder(req: NextRequest) {
-  try {
-    console.log("📥 Incoming request to createOrder");
+    try {
+      const orderData: CreateOrderInput = await req.json()
 
-    const orderData: CreateOrderInput = await req.json();
-    console.log("✅ Parsed orderData:", orderData);
-
-    // Validate required fields
-    if (
-      !orderData.customerName ||
-      !orderData.customerPhone ||
-      !orderData.deliveryAddress
-    ) {
-      console.warn("⚠️ Missing customer details:", {
-        customerName: orderData.customerName,
-        customerPhone: orderData.customerPhone,
-        deliveryAddress: orderData.deliveryAddress,
-      });
-      return NextResponse.json(
-        { error: "Customer name, phone, and delivery address are required" },
-        { status: 400 }
-      );
-    }
-
-    if (!orderData.items || orderData.items.length === 0) {
-      console.warn("⚠️ Empty items array");
-      return NextResponse.json(
-        { error: "Order must contain at least one item" },
-        { status: 400 }
-      );
-    }
-
-    if (!orderData.sessionId) {
-      console.warn("⚠️ Missing sessionId");
-      return NextResponse.json(
-        { error: "Session ID is required" },
-        { status: 400 }
-      );
-    }
-
-    console.log("📍 Validations passed");
-
-    // Calculate distance (for tracking purposes, but delivery is free)
-    const restaurantLocation = "Restaurant Address";
-    const distance = calculateDistance(
-      restaurantLocation,
-      orderData.deliveryAddress,
-      orderData.latitude,
-      orderData.longitude
-    );
-    console.log("📏 Distance calculated:", distance);
-
-    // Set delivery charges to 0 (FREE DELIVERY)
-    const deliveryCharges = 0;
-    console.log("🆓 Delivery charges: FREE (", deliveryCharges, ")");
-
-    // Get food items with current prices
-    const foodItems = await prisma.foodItem.findMany({
-      where: {
-        id: {
-          in: orderData.items.map((item) => item.foodItemId),
-        },
-        isAvailable: true,
-      },
-    });
-    console.log("🍔 Retrieved foodItems:", foodItems);
-
-    // Calculate order totals
-    let subtotal = 0;
-    const orderItems = orderData.items.map((item) => {
-      const foodItem = foodItems.find((fi) => fi.id === item.foodItemId);
-      if (!foodItem) {
-        console.error(`❌ Food item with ID ${item.foodItemId} not found`);
-        throw new Error(
-          `Food item with ID ${item.foodItemId} not found or not available`
-        );
+      // ── Input validation ─────────────────────────────────────────────────
+      if (!orderData.customerName?.trim() || !orderData.customerPhone?.trim() || !orderData.deliveryAddress?.trim()) {
+        return NextResponse.json(
+          { error: 'Customer name, phone, and delivery address are required' },
+          { status: 400 }
+        )
+      }
+      if (!orderData.items?.length) {
+        return NextResponse.json({ error: 'Order must contain at least one item' }, { status: 400 })
+      }
+      if (!orderData.sessionId) {
+        return NextResponse.json({ error: 'Session ID is required' }, { status: 400 })
+      }
+      for (const item of orderData.items) {
+        if (!item.foodItemId || !Number.isInteger(item.quantity) || item.quantity < 1) {
+          return NextResponse.json({ error: 'Each item needs a valid foodItemId and positive integer quantity' }, { status: 400 })
+        }
       }
 
-      const itemTotal = foodItem.price * item.quantity;
-      subtotal += itemTotal;
+      const distance = calculateDistance(orderData.latitude, orderData.longitude)
 
-      console.log(
-        `🛒 Item added: ${foodItem.name}, Qty: ${item.quantity}, Total: ${itemTotal}`
-      );
-
-      return {
-        foodItemId: item.foodItemId,
-        quantity: item.quantity,
-        price: foodItem.price,
-        total: itemTotal,
-      };
-    });
-
-    // Total equals subtotal since delivery is free
-    const total = subtotal + deliveryCharges; // deliveryCharges is 0
-    const orderNumber = generateOrderNumber();
-    console.log("📦 Order summary:", {
-      subtotal,
-      deliveryCharges: "FREE",
-      total,
-      orderNumber,
-    });
-
-    // Create the order - ensure we only use fields that exist in schema
-    const order = await prisma.order.create({
-      data: {
-        orderNumber,
-        customerName: orderData.customerName,
-        customerPhone: orderData.customerPhone,
-        customerEmail: orderData.customerEmail || null,
-        deliveryAddress: orderData.deliveryAddress,
-        latitude: orderData.latitude || null,
-        longitude: orderData.longitude || null,
-        distance: distance || null,
-        subtotal,
-        deliveryCharges, // 0 (free delivery)
-        total,
-        status: "PENDING", // Explicitly set status
-        paymentStatus: "PENDING", // Explicitly set payment status
-        paymentMethod: orderData.paymentMethod || "CASH_ON_DELIVERY",
-        notes: orderData.notes || null,
-        // DO NOT include cancelledAt - it doesn't exist in schema
-        items: {
-          create: orderItems,
+      // Fetch all food items in a single query
+      // Fetch all food items WITH their active variants
+      const foodItems = await prisma.foodItem.findMany({
+        where: {
+          id: { in: orderData.items.map((i) => i.foodItemId) },
+          isAvailable: true,
         },
-      },
-      include: {
-        items: {
-          include: {
-            foodItem: true,
+        select: {
+          id: true,
+          name: true,
+          price: true,
+          variants: {                          // ✅ ADDED — need variant prices
+            where: { isActive: true },
+            select: { id: true, price: true, label: true },
           },
         },
+      })
+
+      if (foodItems.length !== orderData.items.length) {
+        return NextResponse.json(
+          { error: 'One or more food items are unavailable or do not exist' },
+          { status: 400 }
+        )
+      }
+
+      const itemMap = new Map(foodItems.map((f) => [f.id, f]))
+      let subtotal = 0
+
+      // ✅ REPLACED — resolve price from variant if provided, else base price
+      const lineItems = orderData.items.map((item) => {
+        const food = itemMap.get(item.foodItemId)!
+
+        let price: number = Number(food.price)
+        let variantId: string | null = null
+        let variantLabel: string | null = null
+
+        if (item.variantId) {
+          const variant = food.variants.find((v: any) => v.id === item.variantId)
+          if (!variant) {
+            throw new Error(`Variant not found for item "${food.name}". Please re-select your size.`)
+          }
+          price = Number(variant.price)
+          variantId = variant.id
+          variantLabel = variant.label
+        } else if (food.variants.length > 0) {
+          // Item has variants but none was selected — reject instead of silently using base price
+          throw new Error(`Please select a size/variant for "${food.name}"`)
+        }
+
+        const itemTotal = price * item.quantity
+        subtotal += itemTotal
+
+        return {
+          foodItemId: item.foodItemId,
+          variantId,        // ✅ persist variant reference
+          variantLabel,     // ✅ snapshot label so order history is accurate even if variant is later renamed
+          quantity: item.quantity,
+          price,
+          total: itemTotal,
+        }
+      })
+
+      const deliveryCharges = CartModel.calculateDeliveryCharges(distance)  // ✅ use shared helper, not hardcoded 0
+      const total = subtotal + deliveryCharges
+      const orderNumber = generateOrderNumber()
+
+      // Single transaction: create order + clear cart
+      const order = await prisma.$transaction(async (tx) => {
+        const created = await tx.order.create({
+          data: {
+            orderNumber,
+            customerName: orderData.customerName,
+            customerPhone: orderData.customerPhone,
+            customerEmail: orderData.customerEmail ?? null,
+            deliveryAddress: orderData.deliveryAddress,
+            latitude: orderData.latitude ?? null,
+            longitude: orderData.longitude ?? null,
+            distance,
+            subtotal,
+            deliveryCharges: 0,
+            total,
+            paymentMethod: orderData.paymentMethod ?? 'CASH_ON_DELIVERY',
+            notes: orderData.notes ?? null,
+            items: { create: lineItems },
+          },
+          select: orderSelect,
+        })
+
+        await CartModel.clearCart(orderData.sessionId)
+        return created
+      })
+
+      return NextResponse.json({ message: 'Order created successfully', order }, { status: 201 })
+    } catch (error) {
+      console.error('Create order error:', error)
+      return NextResponse.json({ error: 'Failed to create order' }, { status: 500 })
+    }
+  }
+
+  // Add this method to your OrderController class
+
+// POST /api/orders/calculate-delivery
+static async calculateDelivery(req: NextRequest) {
+  try {
+    const body = await req.json()
+    const { latitude, longitude, address } = body
+
+    // Calculate distance (you can use your existing calculateDistance function)
+    let distance = 0
+    if (latitude && longitude) {
+      distance = calculateDistance(latitude, longitude)
+    } else if (address) {
+      // Optionally, you could geocode the address here
+      // For now, return a default or random distance
+      distance = Math.floor(Math.random() * 15) + 1 // 1-15 km
+    } else {
+      return NextResponse.json(
+        { error: 'Either coordinates (latitude/longitude) or address is required' },
+        { status: 400 }
+      )
+    }
+
+    // Calculate delivery charges based on distance
+    let deliveryCharges = 0
+    if (distance <= 4) {
+      deliveryCharges = 0
+    } else if (distance <= 6) {
+      deliveryCharges = 50
+    } else {
+      deliveryCharges = 120
+    }
+
+    // Optional: Add a maximum delivery radius check
+    const MAX_DELIVERY_RADIUS = 15 // km
+    const isDeliverable = distance <= MAX_DELIVERY_RADIUS
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        distance,
+        deliveryCharges,
+        isDeliverable,
+        message: isDeliverable 
+          ? 'Delivery available' 
+          : `Sorry, we only deliver within ${MAX_DELIVERY_RADIUS}km radius`,
       },
-    });
-
-    console.log("✅ Order created successfully:", order.id);
-
-    // Clear the cart after successful order creation
-    await CartModel.clearCart(orderData.sessionId);
-    console.log("🗑️ Cart cleared for session:", orderData.sessionId);
-
-    return NextResponse.json(
-      {
-        message: "Order created successfully",
-        order,
-      },
-      { status: 201 }
-    );
+    })
   } catch (error) {
-    console.error("❌ Create order error:", error);
+    console.error('Calculate delivery error:', error)
     return NextResponse.json(
-      { error: "Failed to create order" },
+      { error: 'Failed to calculate delivery charges' },
       { status: 500 }
-    );
+    )
   }
 }
 
-  // Get all orders (with optional filtering and pagination)
+  // GET /api/orders — paginated, with HTTP cache header for list
   static async getAllOrders(req: NextRequest) {
     try {
-      const { searchParams } = new URL(req.url);
-      const page = parseInt(searchParams.get("page") || "1");
-      const limit = parseInt(searchParams.get("limit") || "20");
-      const status = searchParams.get("status");
-      const dateFrom = searchParams.get("dateFrom");
-      const dateTo = searchParams.get("dateTo");
+      const { searchParams } = new URL(req.url)
+      const page = Math.max(1, parseInt(searchParams.get('page') ?? '1'))
+      const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '20')))
+      const status = searchParams.get('status')
+      const dateFrom = searchParams.get('dateFrom')
+      const dateTo = searchParams.get('dateTo')
+      const skip = (page - 1) * limit
 
-      const skip = (page - 1) * limit;
-
-      const whereClause: any = {};
-
-      if (status) {
-        whereClause.status = status;
-      }
-
+      const where: any = {}
+      if (status) where.status = status
       if (dateFrom || dateTo) {
-        whereClause.createdAt = {};
-        if (dateFrom) whereClause.createdAt.gte = new Date(dateFrom);
-        if (dateTo) whereClause.createdAt.lte = new Date(dateTo);
+        where.createdAt = {}
+        if (dateFrom) where.createdAt.gte = new Date(dateFrom)
+        if (dateTo) where.createdAt.lte = new Date(dateTo)
       }
 
+      // Count + data in parallel
       const [orders, totalCount] = await Promise.all([
         prisma.order.findMany({
-          where: whereClause,
-          include: {
-            items: {
-              include: {
-                foodItem: true,
-              },
-            },
-          },
-          orderBy: { createdAt: "desc" },
+          where,
+          select: orderSelect,
+          orderBy: { createdAt: 'desc' },
           skip,
           take: limit,
         }),
-        prisma.order.count({ where: whereClause }),
-      ]);
+        prisma.order.count({ where }),
+      ])
 
-      return NextResponse.json({
-        orders,
-        pagination: {
-          page,
-          limit,
-          totalCount,
-          totalPages: Math.ceil(totalCount / limit),
-        },
-      });
-    } catch (error) {
-      console.error("Get all orders error:", error);
       return NextResponse.json(
-        { error: "Failed to fetch orders" },
-        { status: 500 }
-      );
+        { orders, pagination: { page, limit, totalCount, totalPages: Math.ceil(totalCount / limit) } },
+        { headers: { 'Cache-Control': 'private, no-store' } } // orders are user-specific / real-time
+      )
+    } catch (error) {
+      console.error('Get all orders error:', error)
+      return NextResponse.json({ error: 'Failed to fetch orders' }, { status: 500 })
     }
   }
 
-  // Get a single order by ID
-  static async getOrderById(
-    req: NextRequest,
-    { params }: { params: { id: string } }
-  ) {
+  // GET /api/orders/:id
+  static async getOrderById(req: NextRequest, { params }: { params: { id: string } }) {
     try {
       const order = await prisma.order.findUnique({
         where: { id: params.id },
-        include: {
-          items: {
-            include: {
-              foodItem: true,
-            },
-          },
-        },
-      });
-
-      if (!order) {
-        return NextResponse.json({ error: "Order not found" }, { status: 404 });
-      }
-
-      return NextResponse.json({ order });
+        select: orderSelect,
+      })
+      if (!order) return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+      return NextResponse.json({ order })
     } catch (error) {
-      console.error("Get order error:", error);
-      return NextResponse.json(
-        { error: "Failed to fetch order" },
-        { status: 500 }
-      );
+      console.error('Get order error:', error)
+      return NextResponse.json({ error: 'Failed to fetch order' }, { status: 500 })
     }
   }
 
-  // Get a single order by order number
-  static async getOrderByOrderNumber(
-    req: NextRequest,
-    { params }: { params: { orderNumber: string } }
-  ) {
+  // GET /api/orders/by-number/:orderNumber
+  static async getOrderByOrderNumber(req: NextRequest, { params }: { params: { orderNumber: string } }) {
     try {
       const order = await prisma.order.findUnique({
         where: { orderNumber: params.orderNumber },
-        include: {
-          items: {
-            include: {
-              foodItem: true,
-            },
-          },
-        },
-      });
-
-      if (!order) {
-        return NextResponse.json({ error: "Order not found" }, { status: 404 });
-      }
-
-      return NextResponse.json({ order });
+        select: orderSelect,
+      })
+      if (!order) return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+      return NextResponse.json({ order })
     } catch (error) {
-      console.error("Get order by number error:", error);
-      return NextResponse.json(
-        { error: "Failed to fetch order" },
-        { status: 500 }
-      );
+      console.error('Get order by number error:', error)
+      return NextResponse.json({ error: 'Failed to fetch order' }, { status: 500 })
     }
   }
 
-  // Update order status
-  static async updateOrderStatus(
-    req: NextRequest,
-    { params }: { params: { id: string } }
-  ) {
+  // PATCH /api/orders/:id/status
+  static async updateOrderStatus(req: NextRequest, { params }: { params: { id: string } }) {
     try {
-      const { status } = await req.json();
+      const body = await req.json()
+      const { status } = body
 
-      if (!status) {
-        return NextResponse.json(
-          { error: "Status is required" },
-          { status: 400 }
-        );
-      }
-
-      const validStatuses = [
-        "PENDING",
-        "CONFIRMED",
-        "PREPARING",
-        "READY",
-        "OUT_FOR_DELIVERY",
-        "DELIVERED",
-        "CANCELLED",
-      ];
-      if (!validStatuses.includes(status)) {
-        return NextResponse.json(
-          { error: "Invalid status value" },
-          { status: 400 }
-        );
+      if (!status) return NextResponse.json({ error: 'Status is required' }, { status: 400 })
+      if (!(VALID_STATUSES as readonly string[]).includes(status)) {
+        return NextResponse.json({ error: `Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}` }, { status: 400 })
       }
 
       const order = await prisma.order.update({
         where: { id: params.id },
         data: { status },
-        include: {
-          items: {
-            include: {
-              foodItem: true,
-            },
-          },
-        },
-      });
-
-      return NextResponse.json({
-        message: "Order status updated successfully",
-        order,
-      });
-    } catch (error) {
-      console.error("Update order status error:", error);
-      return NextResponse.json(
-        { error: "Failed to update order status" },
-        { status: 500 }
-      );
+        select: orderSelect,
+      })
+      return NextResponse.json({ message: 'Order status updated successfully', order })
+    } catch (error: any) {
+      console.error('Update order status error:', error)
+      if (error.code === 'P2025') return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Failed to update order status' }, { status: 500 })
     }
   }
 
-  // Update payment status
-  static async updatePaymentStatus(
-    req: NextRequest,
-    { params }: { params: { id: string } }
-  ) {
+  // PATCH /api/orders/:id/payment-status
+  static async updatePaymentStatus(req: NextRequest, { params }: { params: { id: string } }) {
     try {
-      const { paymentStatus } = await req.json();
+      const { paymentStatus } = await req.json()
 
-      if (!paymentStatus) {
-        return NextResponse.json(
-          { error: "Payment status is required" },
-          { status: 400 }
-        );
-      }
-
-      const validStatuses = ["PENDING", "PAID", "FAILED", "REFUNDED"];
-      if (!validStatuses.includes(paymentStatus)) {
-        return NextResponse.json(
-          { error: "Invalid payment status value" },
-          { status: 400 }
-        );
+      if (!paymentStatus) return NextResponse.json({ error: 'Payment status is required' }, { status: 400 })
+      if (!(VALID_PAYMENT_STATUSES as readonly string[]).includes(paymentStatus)) {
+        return NextResponse.json({ error: `Invalid payment status. Must be one of: ${VALID_PAYMENT_STATUSES.join(', ')}` }, { status: 400 })
       }
 
       const order = await prisma.order.update({
         where: { id: params.id },
         data: { paymentStatus },
-        include: {
-          items: {
-            include: {
-              foodItem: true,
-            },
-          },
-        },
-      });
-
-      return NextResponse.json({
-        message: "Payment status updated successfully",
-        order,
-      });
-    } catch (error) {
-      console.error("Update payment status error:", error);
-      return NextResponse.json(
-        { error: "Failed to update payment status" },
-        { status: 500 }
-      );
+        select: orderSelect,
+      })
+      return NextResponse.json({ message: 'Payment status updated successfully', order })
+    } catch (error: any) {
+      console.error('Update payment status error:', error)
+      if (error.code === 'P2025') return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Failed to update payment status' }, { status: 500 })
     }
   }
 
-  // Cancel an order
-  static async cancelOrder(
-    req: NextRequest,
-    { params }: { params: { id: string } }
-  ) {
+  // DELETE /api/orders/:id (cancel)
+  static async cancelOrder(req: NextRequest, { params }: { params: { id: string } }) {
     try {
-      const { reason } = await req.json();
+      const { reason } = await req.json().catch(() => ({ reason: undefined }))
 
-      // Get existing notes to preserve them
-      const existingOrder = await prisma.order.findUnique({
+      const existing = await prisma.order.findUnique({
         where: { id: params.id },
-        select: { notes: true },
-      });
+        select: { notes: true, status: true },
+      })
+      if (!existing) return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+      if (existing.status === 'CANCELLED') {
+        return NextResponse.json({ error: 'Order is already cancelled' }, { status: 400 })
+      }
 
       const updatedNotes = reason
-        ? `Cancellation reason: ${reason}. ${existingOrder?.notes || ""}`
-        : existingOrder?.notes || "";
+        ? `Cancellation reason: ${reason}. ${existing.notes ?? ''}`.trim()
+        : existing.notes ?? ''
 
       const order = await prisma.order.update({
         where: { id: params.id },
-        data: {
-          status: "CANCELLED",
-          notes: updatedNotes,
+        data: { status: 'CANCELLED', notes: updatedNotes },
+        select: orderSelect,
+      })
+      return NextResponse.json({ message: 'Order cancelled successfully', order })
+    } catch (error: any) {
+      console.error('Cancel order error:', error)
+      if (error.code === 'P2025') return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Failed to cancel order' }, { status: 500 })
+    }
+  }
+
+  // GET /api/orders/dashboard-stats
+  static async getDashboardStats(req: NextRequest) {
+    try {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const tomorrow = new Date(today)
+      tomorrow.setDate(tomorrow.getDate() + 1)
+
+      // All 7 queries in parallel — single round-trip to DB
+      const [
+        todayOrders,
+        todayRevenue,
+        totalOrders,
+        totalRevenue,
+        totalCustomers,
+        averageOrderValue,
+        pendingOrders,
+        completedOrders,
+      ] = await Promise.all([
+        prisma.order.count({ where: { createdAt: { gte: today, lt: tomorrow } } }),
+        prisma.order.aggregate({
+          where: { createdAt: { gte: today, lt: tomorrow }, status: { not: 'CANCELLED' } },
+          _sum: { total: true },
+        }),
+        prisma.order.count(),
+        prisma.order.aggregate({
+          where: { status: { not: 'CANCELLED' } },
+          _sum: { total: true },
+        }),
+        // Use groupBy instead of fetching full rows for distinct count
+        prisma.order.groupBy({ by: ['customerPhone'], _count: { id: true } }),
+        prisma.order.aggregate({
+          where: { status: { not: 'CANCELLED' } },
+          _avg: { total: true },
+        }),
+        prisma.order.count({
+          where: { status: { in: ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY'] } },
+        }),
+        prisma.order.count({ where: { status: 'DELIVERED' } }),
+      ])
+
+      return NextResponse.json(
+        {
+          stats: {
+            todayOrders,
+            todayRevenue: todayRevenue._sum.total ?? 0,
+            totalOrders,
+            totalRevenue: totalRevenue._sum.total ?? 0,
+            totalCustomers: totalCustomers.length,
+            averageOrderValue: averageOrderValue._avg.total ?? 0,
+            pendingOrders,
+            completedOrders,
+          },
         },
-        include: {
-          items: {
-            include: {
-              foodItem: true,
+        { headers: { 'Cache-Control': 'private, max-age=30' } } // stale up to 30s is fine for a dashboard
+      )
+    } catch (error) {
+      console.error('Get dashboard stats error:', error)
+      return NextResponse.json({ error: 'Failed to fetch dashboard stats' }, { status: 500 })
+    }
+  }
+
+  // GET /api/orders/analytics
+  static async getOrderAnalytics(req: NextRequest) {
+    try {
+      const { searchParams } = new URL(req.url)
+      const startDate = searchParams.get('startDate')
+      const endDate = searchParams.get('endDate')
+
+      const dateFilter =
+        startDate || endDate
+          ? {
+              createdAt: {
+                ...(startDate && { gte: new Date(startDate) }),
+                ...(endDate && { lte: new Date(endDate) }),
+              },
+            }
+          : {}
+
+      const nonCancelledWhere = { ...dateFilter, status: { not: 'CANCELLED' as const } }
+
+      // Five queries in parallel
+      const [totalOrders, totalRevenue, averageOrderValue, ordersByStatus, ordersByPaymentMethod] =
+        await Promise.all([
+          prisma.order.count({ where: nonCancelledWhere }),
+          prisma.order.aggregate({ where: nonCancelledWhere, _sum: { total: true } }),
+          prisma.order.aggregate({ where: nonCancelledWhere, _avg: { total: true } }),
+          prisma.order.groupBy({ by: ['status'], where: dateFilter, _count: { id: true } }),
+          prisma.order.groupBy({ by: ['paymentMethod'], where: nonCancelledWhere, _count: { id: true } }),
+        ])
+
+      return NextResponse.json(
+        {
+          analytics: {
+            totalOrders,
+            totalRevenue: totalRevenue._sum.total ?? 0,
+            averageOrderValue: averageOrderValue._avg.total ?? 0,
+            ordersByStatus,
+            ordersByPaymentMethod,
+          },
+        },
+        { headers: { 'Cache-Control': 'private, max-age=60' } }
+      )
+    } catch (error) {
+      console.error('Get order analytics error:', error)
+      return NextResponse.json({ error: 'Failed to fetch order analytics' }, { status: 500 })
+    }
+  }
+
+  //  Generate HTML order slip
+static async generateOrderSlip(req: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: params.id },
+      select: {
+        id: true,
+        orderNumber: true,
+        customerName: true,
+        customerPhone: true,
+        customerEmail: true,
+        deliveryAddress: true,
+        subtotal: true,
+        deliveryCharges: true,
+        discount: true,
+        total: true,
+        status: true,
+        paymentStatus: true,
+        paymentMethod: true,
+        notes: true,
+        createdAt: true,
+        items: {
+          select: {
+            quantity: true,
+            price: true,
+            total: true,
+            variantLabel: true,
+            foodItem: {
+              select: {
+                name: true,
+                description: true,
+              },
             },
           },
         },
-      });
+      },
+    })
 
-      return NextResponse.json({
-        message: "Order cancelled successfully",
-        order,
-      });
-    } catch (error) {
-      console.error("Cancel order error:", error);
-      return NextResponse.json(
-        { error: "Failed to cancel order" },
-        { status: 500 }
-      );
+    if (!order) {
+      return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
-  };
 
-  // Add this method to your OrderController class
-static async getDashboardStats(req: NextRequest) {
-  try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    // Thermal printer optimized HTML/CSS
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Order Slip - ${order.orderNumber}</title>
+        <style>
+          /* Thermal printer optimized styles */
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
+          
+          body {
+            font-family: 'Courier New', 'Monaco', monospace;
+            width: 80mm; /* Standard thermal paper width */
+            margin: 0 auto;
+            padding: 2mm;
+            background: white;
+            font-size: 12px;
+            line-height: 1.3;
+          }
+          
+          /* Hide shadows, borders, backgrounds for printing */
+          @media print {
+            body {
+              margin: 0;
+              padding: 0;
+            }
+            .no-print-break {
+              page-break-inside: avoid;
+            }
+          }
+          
+          .slip {
+            width: 100%;
+          }
+          
+          .header {
+            text-align: center;
+            border-bottom: 1px dashed #000;
+            padding-bottom: 5px;
+            margin-bottom: 10px;
+          }
+          
+          .header h1 {
+            font-size: 16px;
+            font-weight: bold;
+            margin: 0;
+          }
+          
+          .order-number {
+            font-size: 14px;
+            font-weight: bold;
+            margin: 5px 0;
+          }
+          
+          .section {
+            margin-bottom: 10px;
+          }
+          
+          .section-title {
+            font-size: 14px;
+            font-weight: bold;
+            border-bottom: 1px dotted #000;
+            padding-bottom: 3px;
+            margin-bottom: 8px;
+          }
+          
+          .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 3px;
+          }
+          
+          .info-label {
+            font-weight: bold;
+          }
+          
+          /* Table styles for thermal printers */
+          .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 8px 0;
+          }
+          
+          .items-table th,
+          .items-table td {
+            padding: 4px 2px;
+            text-align: left;
+            border-bottom: 1px dotted #ccc;
+          }
+          
+          .items-table th {
+            font-weight: bold;
+            border-bottom: 1px solid #000;
+          }
+          
+          .item-name {
+            font-weight: bold;
+          }
+          
+          .item-variant {
+            font-size: 10px;
+            color: #666;
+          }
+          
+          /* Right-aligned columns */
+          .items-table td:nth-child(3),
+          .items-table td:nth-child(4),
+          .items-table td:nth-child(5),
+          .items-table th:nth-child(3),
+          .items-table th:nth-child(4),
+          .items-table th:nth-child(5) {
+            text-align: right;
+          }
+          
+          /* Totals section */
+          .totals {
+            margin-top: 10px;
+            padding-top: 5px;
+            border-top: 1px dashed #000;
+          }
+          
+          .total-line {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 3px;
+          }
+          
+          .grand-total {
+            font-weight: bold;
+            font-size: 14px;
+            margin-top: 5px;
+            padding-top: 5px;
+            border-top: 1px solid #000;
+          }
+          
+          /* Status badges - using text instead of colors for thermal */
+          .status {
+            font-weight: bold;
+          }
+          
+          .footer {
+            margin-top: 15px;
+            text-align: center;
+            font-size: 10px;
+            padding-top: 10px;
+            border-top: 1px dashed #000;
+          }
+          
+          /* Divider line */
+          .divider {
+            border-top: 1px dashed #000;
+            margin: 8px 0;
+          }
+          
+          /* Monospace for better alignment */
+          .mono {
+            font-family: 'Courier New', monospace;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="slip">
+          <!-- Header -->
+          <div class="header">
+            <h1>SEVERAL - The taste of life.</h1>
+            <div>Order Slip</div>
+            <div class="order-number">#${order.orderNumber}</div>
+            <div class="mono">${new Date(order.createdAt).toLocaleString()}</div>
+          </div>
+          
+          <div class="divider"></div>
+          
+          <!-- Customer Info -->
+          <div class="section">
+            <div class="section-title">CUSTOMER</div>
+            <div class="info-row">
+              <span class="info-label">Name:</span>
+              <span>${order.customerName}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Phone:</span>
+              <span>${order.customerPhone}</span>
+            </div>
+            ${order.customerEmail ? `
+            <div class="info-row">
+              <span class="info-label">Email:</span>
+              <span>${order.customerEmail}</span>
+            </div>
+            ` : ''}
+            <div class="info-row">
+              <span class="info-label">Address:</span>
+              <span>${order.deliveryAddress}</span>
+            </div>
+          </div>
+          
+          <div class="divider"></div>
+          
+          <!-- Order Items -->
+          <div class="section">
+            <div class="section-title">ITEMS</div>
+            <table class="items-table">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Qty</th>
+                  <th>Price</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${order.items.map((item: any) => `
+                  <tr>
+                    <td>
+                      <div class="item-name">${item.foodItem.name}</div>
+                      ${item.variantLabel ? `<div class="item-variant">${item.variantLabel}</div>` : ''}
+                    </td>
+                    <td>${item.quantity}</td>
+                    <td>${item.price}</td>
+                    <td>${item.total}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+          
+          <div class="divider"></div>
+          
+          <!-- Totals -->
+          <div class="totals">
+            <div class="total-line">
+              <span>Subtotal:</span>
+              <span>Rs. ${order.subtotal}</span>
+            </div>
+            <div class="total-line">
+              <span>Delivery:</span>
+              <span>Rs. ${order.deliveryCharges}</span>
+            </div>
+            ${order.discount > 0 ? `
+            <div class="total-line">
+              <span>Discount:</span>
+              <span>-Rs. ${order.discount}</span>
+            </div>
+            ` : ''}
+            <div class="total-line grand-total">
+              <span>TOTAL:</span>
+              <span>Rs. ${order.total}</span>
+            </div>
+          </div>
+          
+          <div class="divider"></div>
+          
+          <!-- Payment & Status -->
+          <div class="section">
+            <div class="info-row">
+              <span class="info-label">Payment:</span>
+              <span>${order.paymentMethod} (${order.paymentStatus})</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Status:</span>
+              <span class="status">${order.status}</span>
+            </div>
+            ${order.notes ? `
+            <div class="info-row">
+              <span class="info-label">Notes:</span>
+              <span>${order.notes}</span>
+            </div>
+            ` : ''}
+          </div>
+          
+          <!-- Footer -->
+          <div class="footer">
+            <div>Thank you for your order!</div>
+            <div class="mono" style="font-size: 10px; margin-top: 5px;">
+              ${new Date().toLocaleString()}
+            </div>
+          </div>
+        </div>
+        
+        <script>
+          // Auto-print when loaded
+          window.onload = function() {
+            window.print();
+          }
+        </script>
+      </body>
+      </html>
+    `
 
-    // Get today's stats
-    const [
-      todayOrders,
-      todayRevenue,
-      totalOrders,
-      totalRevenue,
-      totalCustomers,
-      averageOrderValue,
-      pendingOrders,
-      completedOrders
-    ] = await Promise.all([
-      // Today's orders count
-      prisma.order.count({
-        where: {
-          createdAt: {
-            gte: today,
-            lt: tomorrow
-          }
-        }
-      }),
-      
-      // Today's revenue
-      prisma.order.aggregate({
-        where: {
-          createdAt: {
-            gte: today,
-            lt: tomorrow
-          },
-          status: { not: 'CANCELLED' }
-        },
-        _sum: { total: true }
-      }),
-      
-      // Total orders (all time)
-      prisma.order.count(),
-      
-      // Total revenue (all time)
-      prisma.order.aggregate({
-        where: {
-          status: { not: 'CANCELLED' }
-        },
-        _sum: { total: true }
-      }),
-      
-      // Total unique customers
-      prisma.order.findMany({
-        select: { customerPhone: true },
-        distinct: ['customerPhone']
-      }),
-      
-      // Average order value
-      prisma.order.aggregate({
-        where: {
-          status: { not: 'CANCELLED' }
-        },
-        _avg: { total: true }
-      }),
-      
-      // Pending orders
-      prisma.order.count({
-        where: {
-          status: {
-            in: ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY']
-          }
-        }
-      }),
-      
-      // Completed orders
-      prisma.order.count({
-        where: {
-          status: 'DELIVERED'
-        }
+    return new NextResponse(html, {
+      headers: {
+        'Content-Type': 'text/html',
+        'Cache-Control': 'private, no-store',
+      },
+    })
+  } catch (error) {
+    console.error('Generate order slip error:', error)
+    return NextResponse.json({ error: 'Failed to generate order slip' }, { status: 500 })
+  }
+}
+
+  // GET /api/orders/revenue-report
+  static async getRevenueReport(req: NextRequest) {
+    try {
+      const { searchParams } = new URL(req.url)
+      const startDate = searchParams.get('startDate')
+      const endDate = searchParams.get('endDate')
+
+      const where: any = { status: { not: 'CANCELLED' } }
+      if (startDate || endDate) {
+        where.createdAt = {}
+        if (startDate) where.createdAt.gte = new Date(startDate)
+        if (endDate) where.createdAt.lte = new Date(endDate)
+      }
+
+      const revenueData = await prisma.order.findMany({
+        where,
+        select: { createdAt: true, total: true },
+        orderBy: { createdAt: 'asc' },
       })
-    ]);
 
-    const stats = {
-      todayOrders,
-      todayRevenue: todayRevenue._sum.total || 0,
-      totalOrders,
-      totalRevenue: totalRevenue._sum.total || 0,
-      totalCustomers: totalCustomers.length,
-      averageOrderValue: averageOrderValue._avg.total || 0,
-      pendingOrders,
-      completedOrders
-    };
+      const grouped = revenueData.reduce<Record<string, { date: string; revenue: number; orders: number }>>(
+        (acc, order) => {
+          const date = order.createdAt.toISOString().split('T')[0]
+          if (!acc[date]) acc[date] = { date, revenue: 0, orders: 0 }
+          acc[date].revenue += order.total
+          acc[date].orders += 1
+          return acc
+        },
+        {}
+      )
 
-    return NextResponse.json({ stats });
-  } catch (error) {
-    console.error('Get dashboard stats error:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch dashboard stats' },
-      { status: 500 }
-    );
-  }
-}
-
-  // Get order analytics
-static async getOrderAnalytics(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const startDate = searchParams.get("startDate");
-    const endDate = searchParams.get("endDate");
-
-    const whereClause: any = {
-      status: { not: 'CANCELLED' } 
-    };
-
-    if (startDate || endDate) {
-      whereClause.createdAt = {};
-      if (startDate) whereClause.createdAt.gte = new Date(startDate);
-      if (endDate) whereClause.createdAt.lte = new Date(endDate);
+      return NextResponse.json(
+        { report: Object.values(grouped) },
+        { headers: { 'Cache-Control': 'private, max-age=60' } }
+      )
+    } catch (error) {
+      console.error('Get revenue report error:', error)
+      return NextResponse.json({ error: 'Failed to fetch revenue report' }, { status: 500 })
     }
-
-    console.log('📊 Analytics query with filters:', whereClause);
-
-    const [
-      totalOrders,
-      totalRevenue,
-      averageOrderValue,
-      ordersByStatus,
-      ordersByPaymentMethod,
-    ] = await Promise.all([
-      prisma.order.count({ where: whereClause }),
-      
-      prisma.order.aggregate({
-        where: whereClause,
-        _sum: { total: true },
-      }),
-      
-      prisma.order.aggregate({
-        where: whereClause,
-        _avg: { total: true },
-      }),
-      
-      // Don't exclude cancelled from status breakdown (for complete picture)
-      prisma.order.groupBy({
-        by: ["status"],
-        where: startDate || endDate ? {
-          createdAt: whereClause.createdAt
-        } : {}, // Only apply date filter for status breakdown
-        _count: { id: true },
-      }),
-      
-      prisma.order.groupBy({
-        by: ["paymentMethod"],
-        where: whereClause,
-        _count: { id: true },
-      }),
-    ]);
-
-    const analytics = {
-      totalOrders,
-      totalRevenue: totalRevenue._sum.total || 0,
-      averageOrderValue: averageOrderValue._avg.total || 0,
-      ordersByStatus,
-      ordersByPaymentMethod,
-    };
-
-    console.log('📈 Analytics generated:', {
-      totalOrders: analytics.totalOrders,
-      totalRevenue: analytics.totalRevenue,
-      averageOrderValue: analytics.averageOrderValue
-    });
-
-    return NextResponse.json({ analytics });
-  } catch (error) {
-    console.error("Get order analytics error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch order analytics" },
-      { status: 500 }
-    );
   }
-}
 
-  // Get orders by status count
+  // GET /api/orders/by-status-count
   static async getOrdersByStatus() {
     try {
       const statusCounts = await prisma.order.groupBy({
-        by: ["status"],
+        by: ['status'],
         _count: { id: true },
-      });
-
-      return NextResponse.json({ statusCounts });
-    } catch (error) {
-      console.error("Get orders by status error:", error);
+      })
       return NextResponse.json(
-        { error: "Failed to fetch orders by status" },
-        { status: 500 }
-      );
+        { statusCounts },
+        { headers: { 'Cache-Control': 'private, max-age=30' } }
+      )
+    } catch (error) {
+      console.error('Get orders by status error:', error)
+      return NextResponse.json({ error: 'Failed to fetch orders by status' }, { status: 500 })
     }
   }
 
-  // Get revenue report 
-static async getRevenueReport(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const startDate = searchParams.get("startDate");
-    const endDate = searchParams.get("endDate");
-
-    const whereClause: any = {
-      status: { not: 'CANCELLED' } // ✅ Exclude cancelled orders
-    };
-
-    if (startDate || endDate) {
-      whereClause.createdAt = {};
-      if (startDate) whereClause.createdAt.gte = new Date(startDate);
-      if (endDate) whereClause.createdAt.lte = new Date(endDate);
-    }
-
-    const revenueData = await prisma.order.findMany({
-      where: whereClause,
-      select: {
-        createdAt: true,
-        total: true,
-        status: true, // Include status for debugging
-      },
-      orderBy: { createdAt: "asc" },
-    });
-
-    console.log(`📊 Revenue report: Found ${revenueData.length} orders for analytics`);
-
-    // Group data by date
-    const groupedData = revenueData.reduce((acc: any, order) => {
-      const date = order.createdAt.toISOString().split("T")[0];
-      if (!acc[date]) {
-        acc[date] = { date, revenue: 0, orders: 0 };
-      }
-      acc[date].revenue += order.total;
-      acc[date].orders += 1;
-      return acc;
-    }, {});
-
-    const report = Object.values(groupedData);
-    
-    console.log(`📈 Revenue report generated: ${report.length} days of data`);
-
-    return NextResponse.json({ report });
-  } catch (error) {
-    console.error("Get revenue report error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch revenue report" },
-      { status: 500 }
-    );
-  }
-}
-
-  // Generate order slip for download and WhatsApp sharing
-  static async generateOrderSlip(
-    req: NextRequest,
-    { params }: { params: { id: string } }
-  ) {
+  // GET /api/orders/:id/whatsapp
+  static async generateWhatsAppText(req: NextRequest, { params }: { params: { id: string } }) {
     try {
       const order = await prisma.order.findUnique({
         where: { id: params.id },
-        include: {
+        select: {
+          orderNumber: true,
+          status: true,
+          customerName: true,
+          customerPhone: true,
+          deliveryAddress: true,
+          total: true,
           items: {
-            include: {
-              foodItem: true,
+            select: {
+              quantity: true,
+              foodItem: { select: { name: true } },
             },
           },
         },
-      });
+      })
+      if (!order) return NextResponse.json({ error: 'Order not found' }, { status: 404 })
 
-      if (!order) {
-        return NextResponse.json({ error: "Order not found" }, { status: 404 });
-      }
+      const text = `Order #${order.orderNumber}\nStatus: ${order.status}\nCustomer: ${order.customerName} (${order.customerPhone})\nDelivery: ${order.deliveryAddress}\nItems:\n${order.items.map((i: any) => `- ${i.quantity}x ${i.foodItem.name}`).join('\n')}\nTotal: Rs.${order.total}`.trim()
 
-      // Get the requested format from query parameters
-      const { searchParams } = new URL(req.url);
-      const format = searchParams.get("format") || "json"; // json, text, html, pdf
-
-      // Generate order slip based on requested format
-      switch (format) {
-        case "text":
-          return this.generateTextSlip(order);
-        case "html":
-          return this.generateHtmlSlip(order);
-        case "pdf":
-          return this.generateThermalSlip(order);
-        case "thermal":
-          return this.generateThermal58mm(order);
-        case "thermal58":
-          return this.generatePdfSlip(order);
-        case "escpos":
-          return this.generateESCPOSSlip(order);
-        default:
-          return NextResponse.json({ order });
-      }
+      return NextResponse.json({ text, shareUrl: `https://wa.me/?text=${encodeURIComponent(text)}` })
     } catch (error) {
-      console.error("Generate order slip error:", error);
-      return NextResponse.json(
-        { error: "Failed to generate order slip" },
-        { status: 500 }
-      );
+      console.error('Generate WhatsApp text error:', error)
+      return NextResponse.json({ error: 'Failed to generate WhatsApp text' }, { status: 500 })
     }
   }
-
-  // Generate text format order slip (for WhatsApp sharing)
-  private static generateTextSlip(order: any) {
-    const slipText = `
-🍕 ORDER SLIP 🍕
-Order #: ${order.orderNumber}
-Date: ${new Date(order.createdAt).toLocaleDateString()}
-Time: ${new Date(order.createdAt).toLocaleTimeString()}
-Status: ${order.status}
-Payment: ${order.paymentStatus} (${order.paymentMethod})
-
-👤 CUSTOMER DETAILS
-Name: ${order.customerName}
-Phone: ${order.customerPhone}
-${order.customerEmail ? `Email: ${order.customerEmail}` : ""}
-Address: ${order.deliveryAddress}
-${order.distance ? `Distance: ${order.distance} km` : ""}
-
-📦 ORDER ITEMS
-${order.items
-  .map(
-    (item: any) =>
-      `${item.quantity}x ${item.foodItem.name} - ₹${item.price} each = ₹${item.total}`
-  )
-  .join("\n")}
-
-💵 BILL SUMMARY
-Subtotal: ₹${order.subtotal}
-Delivery: ₹${order.deliveryCharges}
-Total: ₹${order.total}
-
-📝 NOTES: ${order.notes || "None"}
-
-Thank you for your order! 🎉
-    `.trim();
-
-    return new NextResponse(slipText, {
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Content-Disposition": `attachment; filename="order-${order.orderNumber}.txt"`,
-      },
-    });
-  }
-
-  // Generate HTML format order slip
-  private static generateHtmlSlip(order: any) {
-    const htmlContent = `
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Order Slip - ${order.orderNumber}</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        .header { text-align: center; margin-bottom: 20px; }
-        .section { margin-bottom: 15px; }
-        .section-title { font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 5px; margin-bottom: 10px; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
-        th { background-color: #f2f2f2; }
-        .total-row { font-weight: bold; }
-        .notes { padding: 10px; background-color: #f9f9f9; border-radius: 5px; }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>🍕 ORDER SLIP 🍕</h1>
-        <p><strong>Order #:</strong> ${order.orderNumber}</p>
-        <p><strong>Date:</strong> ${new Date(
-          order.createdAt
-        ).toLocaleDateString()} | 
-           <strong>Time:</strong> ${new Date(
-             order.createdAt
-           ).toLocaleTimeString()}</p>
-        <p><strong>Status:</strong> ${order.status} | 
-           <strong>Payment:</strong> ${order.paymentStatus} (${
-      order.paymentMethod
-    })</p>
-    </div>
-
-    <div class="section">
-        <div class="section-title">👤 CUSTOMER DETAILS</div>
-        <p><strong>Name:</strong> ${order.customerName}</p>
-        <p><strong>Phone:</strong> ${order.customerPhone}</p>
-        ${
-          order.customerEmail
-            ? `<p><strong>Email:</strong> ${order.customerEmail}</p>`
-            : ""
-        }
-        <p><strong>Address:</strong> ${order.deliveryAddress}</p>
-        ${
-          order.distance
-            ? `<p><strong>Distance:</strong> ${order.distance} km</p>`
-            : ""
-        }
-    </div>
-
-    <div class="section">
-        <div class="section-title">📦 ORDER ITEMS</div>
-        <table>
-            <thead>
-                <tr>
-                    <th>Item</th>
-                    <th>Qty</th>
-                    <th>Price</th>
-                    <th>Total</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${order.items
-                  .map(
-                    (item: any) => `
-                    <tr>
-                        <td>${item.foodItem.name}</td>
-                        <td>${item.quantity}</td>
-                        <td>₹${item.price}</td>
-                        <td>₹${item.total}</td>
-                    </tr>
-                `
-                  )
-                  .join("")}
-            </tbody>
-        </table>
-    </div>
-
-    <div class="section">
-        <div class="section-title">💵 BILL SUMMARY</div>
-        <table>
-            <tr>
-                <td>Subtotal:</td>
-                <td>₹${order.subtotal}</td>
-            </tr>
-            <tr>
-                <td>Delivery Charges:</td>
-                <td>₹${order.deliveryCharges}</td>
-            </tr>
-            <tr class="total-row">
-                <td>TOTAL:</td>
-                <td>₹${order.total}</td>
-            </tr>
-        </table>
-    </div>
-
-    ${
-      order.notes
-        ? `
-    <div class="section">
-        <div class="section-title">📝 NOTES</div>
-        <div class="notes">${order.notes}</div>
-    </div>
-    `
-        : ""
-    }
-
-    <div class="section" style="text-align: center; margin-top: 30px;">
-        <p>Thank you for your order! 🎉</p>
-    </div>
-</body>
-</html>
-    `.trim();
-
-    return new NextResponse(htmlContent, {
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        "Content-Disposition": `attachment; filename="order-${order.orderNumber}.html"`,
-      },
-    });
-  }
-
-  // Thermal printer optimized slip generator
-  private static generateThermalSlip(order: any) {
-    const slip = `
-================================
-         Several
-         P-562/A Opposite Govt. Nusrat Fateh Ali Khan Hospital, Peoples Colony No 2, Faisalabad
-        Phone: +923290039757
-================================
-
-ORDER #: ${order.orderNumber}
-DATE: ${new Date(order.createdAt).toLocaleDateString("en-IN")}
-TIME: ${new Date(order.createdAt).toLocaleTimeString("en-IN", { hour12: true })}
-
---------------------------------
-CUSTOMER DETAILS
---------------------------------
-Name: ${order.customerName}
-Phone: ${order.customerPhone}
-${order.customerEmail ? `Email: ${order.customerEmail}\n` : ""}
-Address: ${order.deliveryAddress}
-${order.distance ? `Distance: ${order.distance} km\n` : ""}
-
---------------------------------
-ORDER ITEMS
---------------------------------
-${order.items
-  .map((item: any) => {
-    const itemName =
-      item.foodItem.name.length > 20
-        ? item.foodItem.name.substring(0, 17) + "..."
-        : item.foodItem.name;
-    const qty = item.quantity.toString().padStart(2);
-    const price = `Rs.${item.price}`.padStart(8);
-    const total = `Rs.${item.total}`.padStart(8);
-
-    return `${itemName}\n${qty} x ${price} = ${total}`;
-  })
-  .join("\n\n")}
-
---------------------------------
-BILL SUMMARY
---------------------------------
-Subtotal:           Rs.${order.subtotal.toString().padStart(8)}
-Delivery:           Rs.${order.deliveryCharges.toString().padStart(8)}
---------------------------------
-TOTAL:              Rs.${order.total.toString().padStart(8)}
---------------------------------
-
-Payment: ${order.paymentMethod}
-Status: ${order.status}
-
-${order.notes ? `Notes: ${order.notes}\n` : ""}
-================================
-     Thank you for your order!
-       Visit us again soon!
-================================
-
-Generated: ${new Date().toLocaleString("en-IN")}
-`.trim();
-
-    return new NextResponse(slip, {
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Content-Disposition": `attachment; filename="thermal-slip-${order.orderNumber}.txt"`,
-      },
-    });
-  }
-
-  // Alternative: 58mm width format (32 characters)
-  private static generateThermal58mm(order: any) {
-    const slip = `
-================================
-       Several
-P-562/A Opposite Govt. Nusrat Fateh Ali Khan Hospital, Peoples Colony No 2, Faisalabad
-      Phone: +923290039757
-================================
-
-ORDER #: ${order.orderNumber}
-DATE: ${new Date(order.createdAt).toLocaleDateString("en-IN")}
-TIME: ${new Date(order.createdAt).toLocaleTimeString("en-IN", { hour12: true })}
-
---------------------------------
-CUSTOMER
---------------------------------
-${order.customerName}
-${order.customerPhone}
-${
-  order.deliveryAddress.length > 30
-    ? order.deliveryAddress.substring(0, 77) + "..."
-    : order.deliveryAddress
-}
-
---------------------------------
-ITEMS
---------------------------------
-${order.items
-  .map((item: any) => {
-    const name =
-      item.foodItem.name.length > 18
-        ? item.foodItem.name.substring(0, 15) + "..."
-        : item.foodItem.name;
-    const line1 = name;
-    const line2 = `${item.quantity} x Rs.${item.price} = Rs.${item.total}`;
-    return `${line1}\n${line2}`;
-  })
-  .join("\n\n")}
-
---------------------------------
-Subtotal:          Rs.${order.subtotal}
-Delivery:          Rs.${order.deliveryCharges}
---------------------------------
-TOTAL:             Rs.${order.total}
---------------------------------
-
-Payment: ${order.paymentMethod}
-Status: ${order.status}
-
-${order.notes ? `Notes:\n${order.notes}\n` : ""}
-================================
-    Thank you for your order!
-================================
-`.trim();
-
-    return new NextResponse(slip, {
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Content-Disposition": `attachment; filename="thermal58mm-${order.orderNumber}.txt"`,
-      },
-    });
-  }
-
-  // ESC/POS command version for direct printer communication
-  private static generateESCPOSSlip(order: any) {
-    // ESC/POS commands for thermal printers
-    const ESC = "\x1B";
-    const commands = {
-      init: ESC + "@", // Initialize printer
-      centerAlign: ESC + "a1", // Center alignment
-      leftAlign: ESC + "a0", // Left alignment
-      bold: ESC + "E1", // Bold on
-      boldOff: ESC + "E0", // Bold off
-      doubleHeight: ESC + "!1", // Double height
-      normal: ESC + "!0", // Normal size
-      cut: ESC + "i", // Cut paper
-      lineFeed: "\n",
-    };
-
-    const slip =
-      commands.init +
-      commands.centerAlign +
-      commands.bold +
-      commands.doubleHeight +
-      "Several\n" +
-      commands.normal +
-      "P-562/A Opposite Govt. Nusrat Fateh Ali Khan Hospital, Peoples Colony No 2, Faisalabad\n" +
-      "Phone: +923290039757\n" +
-      "================================\n\n" +
-      commands.leftAlign +
-      commands.bold +
-      `ORDER #: ${order.orderNumber}\n` +
-      commands.boldOff +
-      `DATE: ${new Date(order.createdAt).toLocaleDateString("en-IN")}\n` +
-      `TIME: ${new Date(order.createdAt).toLocaleTimeString("en-IN")}\n\n` +
-      commands.bold +
-      "CUSTOMER DETAILS\n" +
-      commands.boldOff +
-      "--------------------------------\n" +
-      `Name: ${order.customerName}\n` +
-      `Phone: ${order.customerPhone}\n` +
-      `Address: ${order.deliveryAddress}\n\n` +
-      commands.bold +
-      "ORDER ITEMS\n" +
-      commands.boldOff +
-      "--------------------------------\n" +
-      order.items
-        .map(
-          (item: any) =>
-            `${item.foodItem.name}\n` +
-            `${item.quantity} x Rs.${item.price} = Rs.${item.total}\n\n`
-        )
-        .join("") +
-      "--------------------------------\n" +
-      commands.bold +
-      `Subtotal: Rs.${order.subtotal}\n` +
-      `Delivery: Rs.${order.deliveryCharges}\n` +
-      "--------------------------------\n" +
-      `TOTAL: Rs.${order.total}\n` +
-      commands.boldOff +
-      "--------------------------------\n\n" +
-      `Payment: ${order.paymentMethod}\n` +
-      `Status: ${order.status}\n\n` +
-      (order.notes ? `Notes: ${order.notes}\n\n` : "") +
-      commands.centerAlign +
-      "================================\n" +
-      "Thank you for your order!\n" +
-      "Visit us again soon!\n" +
-      "================================\n\n" +
-      commands.cut;
-
-    return new NextResponse(slip, {
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Content-Disposition": `attachment; filename="escpos-${order.orderNumber}.txt"`,
-      },
-    });
-  }
-
-  // Generate PDF format order slip (simple implementation)
-  private static async generatePdfSlip(order: any) {
-    // For a real implementation, you would use a PDF library like pdfkit, jspdf, or puppeteer
-    // This is a simplified version that returns HTML that can be converted to PDF
-
-    const htmlContent = this.generateHtmlSlip(order);
-    const htmlText = await htmlContent.text();
-
-    // In a real implementation, you would convert HTML to PDF here
-    // For now, we'll return the HTML with a PDF content type
-
-    return new NextResponse(htmlText, {
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="order-${order.orderNumber}.pdf"`,
-      },
-    });
-  }
-
-  // Generate WhatsApp shareable text
-  static async generateWhatsAppText(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const { id } = await params; // ✅ await before accessing
-
-    const order = await prisma.order.findUnique({
-      where: { id },
-      include: {
-        items: {
-          include: {
-            foodItem: true,
-          },
-        },
-      },
-    });
-
-    if (!order) {
-      return NextResponse.json({ error: "Order not found" }, { status: 404 });
-    }
-
-    const whatsappText = `
-Order #${order.orderNumber}
-Status: ${order.status}
-Customer: ${order.customerName} (${order.customerPhone})
-Delivery: ${order.deliveryAddress}
-Items:
-${order.items
-  .map((item: any) => `- ${item.quantity}x ${item.foodItem.name}`)
-  .join("\n")}
-Total: ₹${order.total}
-    `.trim();
-
-    const encodedText = encodeURIComponent(whatsappText);
-    const whatsappUrl = `https://wa.me/?text=${encodedText}`;
-
-    return NextResponse.json({
-      text: whatsappText,
-      shareUrl: whatsappUrl,
-    });
-  } catch (error) {
-    console.error("Generate WhatsApp text error:", error);
-    return NextResponse.json(
-      { error: "Failed to generate WhatsApp text" },
-      { status: 500 }
-    );
-  }
-}
-
 }

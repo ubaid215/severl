@@ -188,7 +188,7 @@ export default function DashboardPage() {
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {/* Today's Orders */}
-          <div className="bg-gray-900 rounded-lg p-6">
+          <div className="bg-[#1A1C20] rounded-lg p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-400 text-sm font-medium">Today's Orders</p>
@@ -205,7 +205,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Today's Revenue */}
-          <div className="bg-gray-900 rounded-lg p-6">
+          <div className="bg-[#1A1C20] rounded-lg p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-400 text-sm font-medium">Today's Revenue</p>
@@ -222,7 +222,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Pending Orders */}
-          <div className="bg-gray-900 rounded-lg p-6">
+          <div className="bg-[#1A1C20] rounded-lg p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-400 text-sm font-medium">Pending Orders</p>
@@ -239,7 +239,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Average Order Value */}
-          <div className="bg-gray-900 rounded-lg p-6">
+          <div className="bg-[#1A1C20] rounded-lg p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-400 text-sm font-medium">Avg Order Value</p>
@@ -259,7 +259,7 @@ export default function DashboardPage() {
         {/* Charts and Recent Orders */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* Weekly Revenue Chart */}
-          <div className="bg-gray-900 rounded-lg p-6">
+          <div className="bg-[#1A1C20] rounded-lg p-6">
             <h3 className="text-xl font-semibold text-white mb-4">Weekly Overview</h3>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
@@ -308,7 +308,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Quick Stats */}
-          <div className="bg-gray-900 rounded-lg p-6">
+          <div className="bg-[#1A1C20] rounded-lg p-6">
             <h3 className="text-xl font-semibold text-white mb-4">Quick Stats</h3>
             <div className="space-y-6">
               <div className="flex items-center justify-between">
@@ -363,7 +363,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Recent Orders */}
-        <div className="bg-gray-900 rounded-lg p-6">
+        <div className="bg-[#1A1C20] rounded-lg p-6">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-xl font-semibold text-white">Recent Orders</h3>
             <button

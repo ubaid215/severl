@@ -15,20 +15,27 @@ export interface ApiResponse<T = any> {
 // Cart types
 export interface CartItem {
   id: string;
-  sessionId: string;
   foodItemId: string;
-  foodItem: FoodItem;
+  variantId?: string;
   quantity: number;
-  createdAt: Date;
-  updatedAt: Date;
+  price: number;
+  variant?: {
+    id: string;
+    label: string;
+    price: number;
+  };
+  foodItem: {
+    id: string;
+    name: string;
+    image?: string;
+    price: number;
+  };
 }
 
 export interface CartSummary {
   items: CartItem[];
-  subtotal: number;
-  deliveryCharges: number;
-  total: number;
   itemCount: number;
+  subtotal: number;
 }
 
 // Food types
@@ -42,17 +49,28 @@ export interface Category {
   foodItems?: FoodItem[];
 }
 
+export interface Variant {
+  id: string;
+  label: string;
+  price: number;
+  isDefault: boolean;
+  sortOrder: number;
+  isActive: boolean;
+}
+
 export interface FoodItem {
   id: string;
   name: string;
-  description?: string;
+  description: string | null;
   price: number;
   image?: string;
-  categoryId: string;
-  category?: Category;
   isAvailable: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+  category: {
+    id: string;
+    name: string;
+    isActive: boolean;
+  };
+  variants?: Variant[];
 }
 
 // Order types

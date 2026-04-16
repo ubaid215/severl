@@ -22,7 +22,7 @@ export default function ContactPage() {
   return (
     <div className="min-h-screen bg-black text-white">
       {/* Hero Section */}
-      <div className="relative bg-gradient-to-br from-gray-900 via-black to-gray-900 py-20">
+      <div className="relative bg-gradient-to-br from-[#1A1C20] via-black to-[#1A1C20] py-20">
         <div className="absolute inset-0 bg-[url('/pattern.png')] opacity-5"></div>
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <div className="flex items-center justify-center mb-6">
@@ -54,7 +54,7 @@ export default function ContactPage() {
             </div>
 
             {/* Phone Numbers */}
-            <div className="bg-gray-900 rounded-2xl p-6 border border-yellow-500/20 hover:border-yellow-500/40 transition-all duration-300">
+            <div className="bg-[#1A1C20] rounded-2xl p-6 border border-yellow-500/20 hover:border-yellow-500/40 transition-all duration-300">
               <div className="flex items-center mb-4">
                 <Phone className="w-6 h-6 text-yellow-500 mr-3" />
                 <h3 className="text-xl font-semibold text-white">Call Us</h3>
@@ -78,7 +78,7 @@ export default function ContactPage() {
             </div>
 
             {/* Address */}
-            <div className="bg-gray-900 rounded-2xl p-6 border border-yellow-500/20 hover:border-yellow-500/40 transition-all duration-300">
+            <div className="bg-[#1A1C20] rounded-2xl p-6 border border-yellow-500/20 hover:border-yellow-500/40 transition-all duration-300">
               <div className="flex items-center mb-4">
                 <MapPin className="w-6 h-6 text-yellow-500 mr-3" />
                 <h3 className="text-xl font-semibold text-white">Visit Us</h3>
@@ -102,7 +102,7 @@ export default function ContactPage() {
             </div>
 
             {/* Business Hours */}
-            <div className="bg-gray-900 rounded-2xl p-6 border border-yellow-500/20">
+            <div className="bg-[#1A1C20] rounded-2xl p-6 border border-yellow-500/20">
               <div className="flex items-center mb-4">
                 <Clock className="w-6 h-6 text-yellow-500 mr-3" />
                 <h3 className="text-xl font-semibold text-white">Business Hours</h3>
@@ -121,7 +121,7 @@ export default function ContactPage() {
           </div>
 
           {/* Contact Form */}
-          <div className="bg-gray-900 rounded-2xl p-8 border border-yellow-500/20">
+          <div className="bg-[#1A1C20] rounded-2xl p-8 border border-yellow-500/20">
             <div className="text-center mb-8">
               <h2 className="text-3xl font-bold text-yellow-400 mb-4">
                 Send Message
@@ -164,7 +164,6 @@ export default function ContactPage() {
                 <label className="block text-white font-semibold mb-2">Subject</label>
                 <select className="w-full px-4 py-3 bg-black border border-yellow-500/30 rounded-lg text-white focus:border-yellow-500 focus:outline-none transition-colors">
                   <option value="">Select a topic</option>
-                  <option value="reservation">Table Reservation</option>
                   <option value="order">Food Order Inquiry</option>
                   <option value="feedback">Feedback</option>
                   <option value="complaint">Complaint</option>
@@ -205,7 +204,7 @@ export default function ContactPage() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <button 
               onClick={() => window.location.href = '/menu'}
-              className="bg-black text-yellow-500 px-8 py-4 rounded-lg font-bold text-lg hover:bg-gray-900 transition-all duration-300 hover:scale-105 flex items-center"
+              className="bg-black text-yellow-500 px-8 py-4 rounded-lg font-bold text-lg hover:bg-[#1A1C20] transition-all duration-300 hover:scale-105 flex items-center"
             >
               <Utensils className="w-5 h-5 mr-2" />
               View Menu

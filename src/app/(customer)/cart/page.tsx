@@ -513,7 +513,7 @@ export default function CartPage() {
   // Show loading state during SSR and initial client mount
   if (!mounted || loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-[#101828] to-gray-900">
+      <div className="min-h-screen bg-gradient-to-br from-[#1A1C20] via-[#101828] to-[#1A1C20]">
         <div className="flex justify-center items-center py-20 px-4">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mb-4"></div>
@@ -527,7 +527,7 @@ export default function CartPage() {
   // Show empty cart state only after we've loaded data
   if (!cartData || cartData.items.length === 0) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-[#101828] to-gray-900">
+      <div className="min-h-screen bg-gradient-to-br from-[#1A1C20] via-[#101828] to-[#1A1C20]">
         <div className="container mx-auto px-4 py-8 sm:py-20">
           <div className="text-center max-w-md mx-auto">
             <div className="mb-6 sm:mb-8">
@@ -557,10 +557,10 @@ export default function CartPage() {
   const getItemCount = () => cartData?.itemCount || 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-[#101828] to-gray-900">
+    <div className="min-h-screen bg-gradient-to-br from-[#1A1C20] via-[#101828] to-[#1A1C20]">
       <div className="container mx-auto px-4 py-4 sm:py-8">
         {/* Mobile Header - Sticky */}
-        <div className="sticky top-0 bg-gradient-to-b from-gray-900 to-gray-900/95 backdrop-blur-sm z-10 pb-4 pt-2 sm:pt-0 sm:relative sm:bg-transparent">
+        <div className="sticky top-0 bg-gradient-to-b from-[#1A1C20] to-[#1A1C20]/95 backdrop-blur-sm z-10 pb-4 pt-2 sm:pt-0 sm:relative sm:bg-transparent">
           <div className="flex items-center gap-3 sm:gap-4">
             <Link 
               href="/menu"

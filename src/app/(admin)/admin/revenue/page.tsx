@@ -193,7 +193,7 @@ export default function RevenuePage() {
           <div className="flex flex-wrap items-center gap-3 mt-4 sm:mt-0">
             <button
               onClick={exportRevenueData}
-              className="flex items-center bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
+              className="flex items-center bg-[#1A1C20] text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
             >
               <Download size={16} className="mr-2" />
               <span className="hidden sm:inline">Export</span>
@@ -224,7 +224,7 @@ export default function RevenuePage() {
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                     timeRange === range
                       ? "bg-yellow-500 text-black"
-                      : "bg-gray-800 text-gray-300 hover:bg-gray-700"
+                      : "bg-[#1A1C20] text-gray-300 hover:bg-gray-700"
                   }`}
                 >
                   {range.charAt(0).toUpperCase() + range.slice(1)}
@@ -239,7 +239,7 @@ export default function RevenuePage() {
               className={`p-2 rounded-lg transition-colors ${
                 chartType === "line"
                   ? "bg-yellow-500 text-black"
-                  : "bg-gray-800 text-gray-300 hover:bg-gray-700"
+                  : "bg-[#1A1C20] text-gray-300 hover:bg-gray-700"
               }`}
             >
               <LineChartIcon size={20} />
@@ -249,7 +249,7 @@ export default function RevenuePage() {
               className={`p-2 rounded-lg transition-colors ${
                 chartType === "bar"
                   ? "bg-yellow-500 text-black"
-                  : "bg-gray-800 text-gray-300 hover:bg-gray-700"
+                  : "bg-[#1A1C20] text-gray-300 hover:bg-gray-700"
               }`}
             >
               <BarChart3 size={20} />
@@ -260,7 +260,7 @@ export default function RevenuePage() {
         {/* Stats Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
           {/* Total Revenue */}
-          <div className="bg-gray-900 rounded-lg p-4 md:p-6">
+          <div className="bg-[#1A1C20] rounded-lg p-4 md:p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-400 text-sm font-medium">
@@ -294,7 +294,7 @@ export default function RevenuePage() {
           </div>
 
           {/* Total Orders */}
-          <div className="bg-gray-900 rounded-lg p-4 md:p-6">
+          <div className="bg-[#1A1C20] rounded-lg p-4 md:p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-400 text-sm font-medium">
@@ -315,7 +315,7 @@ export default function RevenuePage() {
           </div>
 
           {/* Average Order Value */}
-          <div className="bg-gray-900 rounded-lg p-4 md:p-6">
+          <div className="bg-[#1A1C20] rounded-lg p-4 md:p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-400 text-sm font-medium">
@@ -336,7 +336,7 @@ export default function RevenuePage() {
           </div>
 
           {/* Growth Rate */}
-          <div className="bg-gray-900 rounded-lg p-4 md:p-6">
+          <div className="bg-[#1A1C20] rounded-lg p-4 md:p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-400 text-sm font-medium">Growth Rate</p>
@@ -378,7 +378,7 @@ export default function RevenuePage() {
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           {/* Main Revenue Chart */}
-          <div className="lg:col-span-2 bg-gray-900 rounded-lg p-4 md:p-6">
+          <div className="lg:col-span-2 bg-[#1A1C20] rounded-lg p-4 md:p-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
               <h3 className="text-xl font-semibold text-white mb-2 sm:mb-0">
                 Revenue Trend
@@ -471,7 +471,7 @@ export default function RevenuePage() {
           </div>
 
           {/* Category Performance */}
-          <div className="bg-gray-900 rounded-lg p-4 md:p-6">
+          <div className="bg-[#1A1C20] rounded-lg p-4 md:p-6">
             <h3 className="text-xl font-semibold text-white mb-6">
               Top Categories
             </h3>
@@ -547,7 +547,7 @@ export default function RevenuePage() {
         </div>
 
         {/* Detailed Revenue Table */}
-        <div className="bg-gray-900 rounded-lg p-4 md:p-6">
+        <div className="bg-[#1A1C20] rounded-lg p-4 md:p-6">
           <h3 className="text-xl font-semibold text-white mb-6">
             Revenue Details
           </h3>
@@ -584,7 +584,7 @@ export default function RevenuePage() {
                   return (
                     <tr
                       key={item.period}
-                      className="border-b border-gray-800 hover:bg-gray-800"
+                      className="border-b border-[#1A1C20] hover:bg-[#1A1C20]"
                     >
                       <td className="py-4 text-white font-medium">
                         {formatPeriodLabel(item.period)}
@@ -628,7 +628,7 @@ export default function RevenuePage() {
               return (
                 <div
                   key={item.period}
-                  className="bg-gray-800 rounded-lg p-4 border border-gray-700"
+                  className="bg-[#1A1C20] rounded-lg p-4 border border-gray-700"
                 >
                   <div className="flex justify-between items-start mb-3">
                     <h4 className="text-yellow-500 font-semibold text-lg">

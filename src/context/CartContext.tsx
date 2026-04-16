@@ -7,8 +7,14 @@ import { useOptimizedCart } from '@/hooks/useOptimizedCart'
 interface CartItem {
   id: string
   foodItemId: string
+  variantId?: string  // Add this
   quantity: number
   price: number
+  variant?: {
+    id: string
+    label: string
+    price: number
+  }
   foodItem: {
     id: string
     name: string
@@ -27,7 +33,7 @@ interface CartContextType {
   cart: Cart | null
   loading: boolean
   sessionId: string
-  addToCart: (foodItemId: string, quantity?: number) => Promise<void>
+  addToCart: (foodItemId: string, quantity?: number, variantId?: string) => Promise<void>  // Add variantId parameter
   removeFromCart: (cartItemId: string) => Promise<void>
   updateQuantity: (cartItemId: string, quantity: number) => Promise<void>
   clearCart: () => Promise<void>

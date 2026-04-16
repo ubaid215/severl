@@ -58,21 +58,50 @@ model Category {
 }
 
 model FoodItem {
-  id          String      @id @default(cuid())
+  id          String            @id @default(cuid())
   name        String
   description String?
+  /// Base price — used when the item has no variants.
+  /// When variants exist, each variant carries its own price and this
+  /// field reflects the default variant price for display purposes.
   price       Float
   image       String?
-  isAvailable Boolean     @default(true)
+  isAvailable Boolean           @default(true)
   categoryId  String
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
   deletedAt   DateTime?
+  category    Category          @relation(fields: [categoryId], references: [id])
+  variants    FoodItemVariant[]
   cartItems   CartItem[]
-  category    Category    @relation(fields: [categoryId], references: [id])
   orderItems  OrderItem[]
 
   @@map("food_items")
+}
+
+/// A size / portion variant of a FoodItem (e.g. Small / Medium / Large, 6 pcs / 12 pcs).
+/// When a FoodItem has no variants the cart/order use FoodItem.price directly.
+/// When variants exist the user must pick one; its price is used.
+model FoodItemVariant {
+  id         String    @id @default(cuid())
+  foodItemId String
+  /// Human-readable label shown to the customer, e.g. "Small", "Large", "6 pcs"
+  label      String
+  price      Float
+  /// Only one variant per food item may be the default
+  isDefault  Boolean   @default(false)
+  /// Controls display order in the UI (0 = first)
+  sortOrder  Int       @default(0)
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  foodItem   FoodItem   @relation(fields: [foodItemId], references: [id], onDelete: Cascade)
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  @@unique([foodItemId, label])
+  @@map("food_item_variants")
 }
 
 model SpecialDeal {
@@ -103,33 +132,50 @@ model Cart {
 }
 
 model CartItem {
-  id         String   @id @default(cuid())
+  id         String  @id @default(cuid())
   cartId     String
   foodItemId String
-  quantity   Int      @default(1)
+  /// null = no variant selected (item has no variants)
+  variantId  String?
+  quantity   Int     @default(1)
+  /// Snapshot of the price at the time the item was added
   price      Float
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  cart       Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  foodItem   FoodItem @relation(fields: [foodItemId], references: [id])
 
-  @@unique([cartId, foodItemId])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cart     Cart             @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  foodItem FoodItem         @relation(fields: [foodItemId], references: [id])
+  variant  FoodItemVariant? @relation(fields: [variantId], references: [id])
+
+  /// A cart can only contain one entry per (item + variant) combination
+  @@unique([cartId, foodItemId, variantId])
   @@map("cart_items")
 }
 
 model OrderItem {
-  id         String   @id @default(cuid())
-  orderId    String
-  foodItemId String
-  quantity   Int
-  price      Float
-  total      Float
-  createdAt  DateTime @default(now())
-  foodItem   FoodItem @relation(fields: [foodItemId], references: [id])
-  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  id           String  @id @default(cuid())
+  orderId      String
+  foodItemId   String
+  /// null = no variant was selected
+  variantId    String?
+  /// Snapshot of the variant label at order time so history is preserved
+  /// even if the variant is later renamed or deleted
+  variantLabel String?
+  quantity     Int
+  price        Float
+  total        Float
+
+  createdAt DateTime @default(now())
+
+  order    Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  foodItem FoodItem         @relation(fields: [foodItemId], references: [id])
+  variant  FoodItemVariant? @relation(fields: [variantId], references: [id])
 
   @@map("order_items")
 }
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
 
 enum Role {
   USER

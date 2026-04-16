@@ -1,8 +1,11 @@
+// models/cart.ts
 import { prisma } from '../app/lib/prisma'
 
 export interface AddToCartData {
   sessionId: string
   foodItemId: string
+  /** Pass variantId when the item has size/portion variants */
+  variantId?: string
   quantity: number
 }
 
@@ -10,167 +13,180 @@ export interface UpdateCartItemData {
   quantity: number
 }
 
+// ─── Shared select shapes ─────────────────────────────────────────────────────
+
+const variantSelect = {
+  id: true,
+  label: true,
+  price: true,
+} as const
+
+const cartItemSelect = {
+  id: true,
+  cartId: true,
+  foodItemId: true,
+  variantId: true,
+  quantity: true,
+  price: true,
+  variant: { select: variantSelect },
+  foodItem: {
+    select: {
+      id: true,
+      name: true,
+      image: true,
+      price: true,
+      isAvailable: true,
+      category: { select: { id: true, name: true, isActive: true } },
+      variants: {
+        where: { isActive: true },
+        select: { id: true, label: true, price: true, isDefault: true, sortOrder: true },
+        orderBy: { sortOrder: 'asc' as const },
+      },
+    },
+  },
+} as const
+
+const cartWithItemsSelect = {
+  id: true,
+  sessionId: true,
+  items: { select: cartItemSelect },
+} as const
+
+// ─── CartModel ────────────────────────────────────────────────────────────────
+
 export class CartModel {
   static async getOrCreateCart(sessionId: string) {
-    let cart = await prisma.cart.findUnique({
+    return await prisma.cart.upsert({
       where: { sessionId },
-      include: {
-        items: {
-          include: {
-            foodItem: {
-              include: {
-                category: true
-              }
-            }
-          }
-        }
-      }
+      update: {},
+      create: { sessionId },
+      select: cartWithItemsSelect,
     })
-
-    if (!cart) {
-      cart = await prisma.cart.create({
-        data: { sessionId },
-        include: {
-          items: {
-            include: {
-              foodItem: {
-                include: {
-                  category: true
-                }
-              }
-            }
-          }
-        }
-      })
-    }
-
-    return cart
   }
 
+  /**
+   * Add an item (with optional variant) to the cart.
+   *
+   * Rules:
+   *  - If the food item has variants, `variantId` is **required**.
+   *  - Price is always taken from the variant when one is provided,
+   *    otherwise from the food item's base price.
+   *  - Uniqueness is (cartId, foodItemId, variantId) so e.g. a Small and a
+   *    Large pizza are stored as separate cart lines.
+   */
   static async addItem(data: AddToCartData) {
-    const { sessionId, foodItemId, quantity } = data
+    const { sessionId, foodItemId, variantId, quantity } = data
 
-    // Get or create cart
-    const cart = await this.getOrCreateCart(sessionId)
+    // Run cart lookup and food item lookup in parallel
+    const [cart, foodItem] = await Promise.all([
+      this.getOrCreateCart(sessionId),
+      prisma.foodItem.findUnique({
+        where: { id: foodItemId },
+        select: {
+          id: true,
+          price: true,
+          isAvailable: true,
+          variants: {
+            where: { isActive: true },
+            select: { id: true, price: true },
+          },
+        },
+      }),
+    ])
 
-    // Get food item to get current price
-    const foodItem = await prisma.foodItem.findUnique({
-      where: { id: foodItemId }
-    })
+    if (!foodItem) throw new Error('Food item not found')
+    if (!foodItem.isAvailable) throw new Error('Food item is not available')
 
-    if (!foodItem) {
-      throw new Error('Food item not found')
+    // Validate variantId when the item has variants
+    if (foodItem.variants.length > 0 && !variantId) {
+      throw new Error('Please select a size/variant for this item')
     }
 
-    if (!foodItem.isAvailable) {
-      throw new Error('Food item is not available')
+    let resolvedVariantId: string | null = null
+    let price = foodItem.price
+
+    if (variantId) {
+      const variant = foodItem.variants.find((v: { id: string; price: number }) => v.id === variantId)
+      if (!variant) throw new Error('Selected variant not found or inactive')
+      resolvedVariantId = variantId
+      price = variant.price
     }
 
-    // Check if item already exists in cart
-    const existingItem = await prisma.cartItem.findUnique({
+    // Check for an existing line with the same (foodItem + variant)
+    // Use findFirst with compound where instead of findUnique with compound key
+    const existingItem = await prisma.cartItem.findFirst({
       where: {
-        cartId_foodItemId: {
-          cartId: cart.id,
-          foodItemId
-        }
-      }
+        cartId: cart.id,
+        foodItemId: foodItemId,
+        variantId: resolvedVariantId,
+      },
+      select: { id: true, quantity: true },
     })
 
     if (existingItem) {
-      // Update quantity
       return await prisma.cartItem.update({
         where: { id: existingItem.id },
-        data: { 
-          quantity: existingItem.quantity + quantity,
-          price: foodItem.price // Update price in case it changed
-        },
-        include: {
-          foodItem: {
-            include: {
-              category: true
-            }
-          }
-        }
-      })
-    } else {
-      // Create new cart item
-      return await prisma.cartItem.create({
         data: {
-          cartId: cart.id,
-          foodItemId,
-          quantity,
-          price: foodItem.price
+          quantity: existingItem.quantity + quantity,
+          price, // refresh price in case it changed
         },
-        include: {
-          foodItem: {
-            include: {
-              category: true
-            }
-          }
-        }
+        select: cartItemSelect,
       })
     }
+
+    return await prisma.cartItem.create({
+      data: {
+        cartId: cart.id,
+        foodItemId,
+        variantId: resolvedVariantId,
+        quantity,
+        price,
+      },
+      select: cartItemSelect,
+    })
   }
 
   static async updateItem(cartItemId: string, data: UpdateCartItemData) {
-    if (data.quantity <= 0) {
-      return await this.removeItem(cartItemId)
-    }
+    if (data.quantity <= 0) return await this.removeItem(cartItemId)
 
     return await prisma.cartItem.update({
       where: { id: cartItemId },
       data,
-      include: {
-        foodItem: {
-          include: {
-            category: true
-          }
-        }
-      }
+      select: cartItemSelect,
     })
   }
 
   static async removeItem(cartItemId: string) {
     return await prisma.cartItem.delete({
-      where: { id: cartItemId }
+      where: { id: cartItemId },
+      select: { id: true },
     })
   }
 
   static async clearCart(sessionId: string) {
     const cart = await prisma.cart.findUnique({
-      where: { sessionId }
+      where: { sessionId },
+      select: { id: true },
     })
-
     if (cart) {
-      await prisma.cartItem.deleteMany({
-        where: { cartId: cart.id }
-      })
+      await prisma.cartItem.deleteMany({ where: { cartId: cart.id } })
     }
-
     return { success: true }
   }
 
   static async getCartSummary(sessionId: string) {
     const cart = await this.getOrCreateCart(sessionId)
-    
-    const summary = {
+
+    return {
       items: cart.items,
       itemCount: cart.items.reduce((sum, item) => sum + item.quantity, 0),
-      subtotal: cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0),
+      subtotal: cart.items.reduce((sum, item) => sum + item.price * item.quantity, 0),
     }
-
-    return summary
   }
 
-  
-
   static calculateDeliveryCharges(distance: number): number {
-    if (distance <= 4) {
-      return 0 // Free delivery
-    } else if (distance <= 6) {
-      return 50 // 4-6km: 50 rupees
-    } else {
-      return 120 // Above 6km: 120 rupees
-    }
+    if (distance <= 4) return 0
+    if (distance <= 6) return 50
+    return 120
   }
 }

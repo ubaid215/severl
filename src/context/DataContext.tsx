@@ -1,4 +1,3 @@
-// contexts/DataContext.tsx
 'use client'
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
@@ -31,6 +30,14 @@ interface DataContextType {
   refreshData: () => Promise<void>
 }
 
+interface DataProviderProps {
+  children: ReactNode
+  initialData?: {
+    categories: Category[]
+    foodItems: FoodItem[]
+  }
+}
+
 const DataContext = createContext<DataContextType | undefined>(undefined)
 
 // Client-side cache with timestamp
@@ -42,10 +49,15 @@ let cachedData: {
 
 const CACHE_DURATION = 2 * 60 * 1000 // 2 minutes
 
-export function DataProvider({ children }: { children: ReactNode }) {
-  const [categories, setCategories] = useState<Category[]>([])
-  const [foodItems, setFoodItems] = useState<FoodItem[]>([])
-  const [loading, setLoading] = useState(true)
+export function DataProvider({ children, initialData }: DataProviderProps) {
+  const [categories, setCategories] = useState<Category[]>(
+    initialData?.categories ?? []
+  )
+  const [foodItems, setFoodItems] = useState<FoodItem[]>(
+    initialData?.foodItems ?? []
+  )
+  // If server provided initialData, we're already loaded — no client fetch needed
+  const [loading, setLoading] = useState(!initialData)
 
   const fetchData = async (force: boolean = false) => {
     // Use cache if available and fresh
@@ -60,27 +72,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true)
       console.log('🔄 Fetching fresh data from API')
-      
+
       const [categoriesRes, foodItemsRes] = await Promise.all([
         fetch('/api/categories'),
-        fetch('/api/food-items')
+        fetch('/api/food-items'),
       ])
 
       const categoriesData = await categoriesRes.json()
       const foodItemsData = await foodItemsRes.json()
 
-      const newCategories = categoriesData.data || []
-      const newFoodItems = foodItemsData.data || []
+      const newCategories = categoriesData.data ?? []
+      const newFoodItems = foodItemsData.data ?? []
 
-      // Update state
       setCategories(newCategories)
       setFoodItems(newFoodItems)
 
-      // Update cache
+      // Update module-level cache
       cachedData = {
         categories: newCategories,
         foodItems: newFoodItems,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       }
     } catch (error) {
       console.error('Error fetching data:', error)
@@ -90,6 +101,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
+    // Server already gave us data — seed the cache and skip fetch
+    if (initialData) {
+      cachedData = {
+        categories: initialData.categories,
+        foodItems: initialData.foodItems,
+        timestamp: Date.now(),
+      }
+      return
+    }
     fetchData()
   }, [])
 

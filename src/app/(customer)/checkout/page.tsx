@@ -5,14 +5,27 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft, MapPin, Phone, Mail, User, CreditCard, Truck } from "lucide-react";
 
+interface Variant {
+  id: string;
+  label: string;
+  price: number;
+  isDefault: boolean;
+  sortOrder: number;
+  isActive: boolean;
+}
+
 interface CartItem {
   id: string;
   foodItemId: string;
+  variantId?: string;
   quantity: number;
+  price: number;
+  variant?: Variant;
   foodItem: {
     id: string;
     name: string;
     price: number;
+    image?: string;
   };
 }
 
@@ -38,7 +51,7 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [mounted, setMounted] = useState(false); 
-  const [sessionId, setSessionId] = useState<string | null>(null); // Start as null
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [formData, setFormData] = useState<CheckoutForm>({
     customerName: "",
     customerPhone: "",
@@ -74,9 +87,42 @@ export default function CheckoutPage() {
       const response = await fetch(`/api/cart?sessionId=${sessionId}`);
       const data = await response.json();
       
+      console.log('🔍 Full API Response:', data);
+      
       if (data.success && data.data) {
-        setCartData(data.data);
+        // Ensure items array exists
+        const items = data.data.items || [];
+        
+        // Transform items to ensure each has correct price
+        const transformedItems: CartItem[] = items.map((item: any) => {
+          // Get the correct price: variant price is already in the item.price
+          let itemPrice = item.price || item.variant?.price || item.foodItem?.price || 0;
+          
+          return {
+            ...item,
+            price: itemPrice
+          };
+        });
+        
+        // Calculate totals
+        const subtotal = data.data.subtotal || transformedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        const deliveryCharges = 0; 
+        const total = subtotal + deliveryCharges;
+        const itemCount = data.data.itemCount || transformedItems.reduce((sum, item) => sum + item.quantity, 0);
+        
+        const cartSummary: CartSummary = {
+          items: transformedItems,
+          subtotal: subtotal,
+          deliveryCharges: deliveryCharges,
+          total: total,
+          itemCount: itemCount
+        };
+        
+        console.log('📊 Final Cart Summary:', cartSummary);
+        
+        setCartData(cartSummary);
       } else {
+        console.error('API returned success=false:', data);
         window.location.href = "/cart";
       }
     } catch (error) {
@@ -98,60 +144,87 @@ export default function CheckoutPage() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!cartData || !sessionId) return;
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!cartData || !sessionId) return;
 
-    setSubmitting(true);
+  setSubmitting(true);
 
-    try {
-      const orderData = {
-        sessionId,
-        customerName: formData.customerName,
-        customerPhone: formData.customerPhone,
-        customerEmail: formData.customerEmail || undefined,
-        deliveryAddress: formData.deliveryAddress,
-        paymentMethod: formData.paymentMethod,
-        notes: formData.notes || undefined,
-        items: cartData.items.map(item => ({
-          foodItemId: item.foodItemId,
-          quantity: item.quantity
-        }))
+  try {
+    // IMPORTANT: Ensure each item has the correct variant price
+    const orderItems = cartData.items.map(item => {
+      // Get the correct price from the variant or item
+      const itemPrice = item.variant?.price || item.price || item.foodItem?.price || 0;
+      
+      return {
+        foodItemId: item.foodItemId,
+        variantId: item.variantId || undefined, // Include variant ID
+        quantity: item.quantity,
+        price: itemPrice, // Use the actual variant price
+        total: itemPrice * item.quantity
       };
+    });
 
-      const response = await fetch("/api/orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(orderData)
-      });
+    const orderData = {
+      sessionId,
+      customerName: formData.customerName,
+      customerPhone: formData.customerPhone,
+      customerEmail: formData.customerEmail || undefined,
+      deliveryAddress: formData.deliveryAddress,
+      paymentMethod: formData.paymentMethod,
+      notes: formData.notes || undefined,
+      items: orderItems
+    };
 
-      const result = await response.json();
+    console.log('📤 Submitting order with items:', orderItems); // Debug log
 
-      if (response.ok && result.order) {
-        // Clear cart after successful order
-        localStorage.removeItem("sessionId");
-        window.location.href = `/checkout/success?orderNumber=${result.order.orderNumber}`;
-      } else {
-        throw new Error(result.error || "Failed to create order");
-      }
-    } catch (error) {
-      console.error("Checkout error:", error);
-      alert("Failed to place order. Please try again.");
-    } finally {
-      setSubmitting(false);
+    const response = await fetch("/api/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(orderData)
+    });
+
+    const result = await response.json();
+
+    if (response.ok && result.order) {
+      // Clear cart after successful order
+      localStorage.removeItem("sessionId");
+      window.location.href = `/checkout/success?orderNumber=${result.order.orderNumber}`;
+    } else {
+      throw new Error(result.error || "Failed to create order");
     }
-  };
+  } catch (error) {
+    console.error("Checkout error:", error);
+    alert("Failed to place order. Please try again.");
+  } finally {
+    setSubmitting(false);
+  }
+};
 
-  // Safe helper functions to handle potential undefined values
+  // Get display values with fallbacks
   const getSubtotal = () => cartData?.subtotal || 0;
   const getDeliveryCharges = () => cartData?.deliveryCharges || 0;
   const getTotal = () => cartData?.total || 0;
   const getItemCount = () => cartData?.itemCount || 0;
 
-  // Show loading state during hydration
+  const getItemDisplayName = (item: CartItem): string => {
+    let name = item.foodItem?.name || "Unknown Item";
+    if (item.variant?.label) {
+      name += ` (${item.variant.label})`;
+    } else if (item.variantId) {
+      name += ` (Variant)`;
+    }
+    return name;
+  };
+
+  const getItemPrice = (item: CartItem): number => {
+    return item.price || item.variant?.price || item.foodItem?.price || 0;
+  };
+
+  // Show loading state
   if (!mounted || loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-[#101828] to-gray-900">
+      <div className="min-h-screen bg-gradient-to-br from-[#1A1C20] via-[#101828] to-[#1A1C20]">
         <div className="flex justify-center items-center py-20">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mb-4"></div>
@@ -164,7 +237,7 @@ export default function CheckoutPage() {
 
   if (!cartData || cartData.items.length === 0) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-[#101828] to-gray-900">
+      <div className="min-h-screen bg-[#1A1C20]">
         <div className="text-center py-20">
           <h2 className="text-2xl font-bold text-white mb-4">No items in cart</h2>
           <Link href="/menu" className="text-yellow-500 hover:underline">
@@ -176,7 +249,7 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-[#101828] to-gray-900">
+    <div className="min-h-screen bg-gradient-to-br from-[#1A1C20] via-[#090d15] to-[#1A1C20]">
       <div className="max-w-4xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
@@ -338,35 +411,57 @@ export default function CheckoutPage() {
                 Order Summary
               </h2>
 
-              {/* Items */}
-              <div className="space-y-3 mb-4">
-                {cartData.items.map((item) => (
-                  <div key={item.id} className="flex justify-between text-sm">
-                    <span className="text-gray-300">
-                      {item.quantity}x {item.foodItem.name}
-                    </span>
-                    <span className="text-white">
-                      Rs {((item.foodItem.price || 0) * item.quantity).toFixed(2)}
-                    </span>
-                  </div>
-                ))}
+              {/* Items with variant details */}
+              <div className="space-y-3 mb-4 max-h-80 overflow-y-auto custom-scrollbar">
+                {cartData.items.map((item) => {
+                  const itemPrice = getItemPrice(item);
+                  const itemTotal = itemPrice * item.quantity;
+                  const displayName = getItemDisplayName(item);
+                  
+                  return (
+                    <div key={item.id} className="flex justify-between text-sm border-b border-yellow-500/10 pb-2">
+                      <div className="flex-1">
+                        <span className="text-gray-300">
+                          {item.quantity}x
+                        </span>
+                        <span className="text-gray-300 ml-1">
+                          {displayName}
+                        </span>
+                        {item.variant && (
+                          <div className="text-[10px] text-yellow-500/70 mt-0.5">
+                            Size: {item.variant.label} - ₨{item.variant.price}
+                          </div>
+                        )}
+                      </div>
+                      <span className="text-white font-medium ml-2">
+                        ₨ {itemTotal.toFixed(2)}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
 
-              <hr className="border-yellow-500/20 mb-4" />
+              {cartData.items.length === 0 && (
+                <div className="text-center text-gray-400 py-4">
+                  No items in cart
+                </div>
+              )}
+
+              <hr className="border-yellow-500/20 my-4" />
 
               {/* Totals */}
               <div className="space-y-2 mb-6">
                 <div className="flex justify-between text-gray-300">
-                  <span>Subtotal:</span>
-                  <span>Rs {getSubtotal().toFixed(2)}</span>
+                  <span>Subtotal ({getItemCount()} {getItemCount() === 1 ? 'item' : 'items'}):</span>
+                  <span>₨ {getSubtotal().toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-gray-300">
-                  <span>Delivery:</span>
-                  <span>Rs {getDeliveryCharges().toFixed(2)}</span>
+                  <span>Delivery Charges:</span>
+                  <span>₨ {getDeliveryCharges().toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-lg font-bold text-white border-t border-yellow-500/20 pt-2">
+                <div className="flex justify-between text-lg font-bold text-white border-t border-yellow-500/20 pt-3 mt-2">
                   <span>Total:</span>
-                  <span className="text-yellow-500">Rs {getTotal().toFixed(2)}</span>
+                  <span className="text-yellow-500 text-xl">₨ {getTotal().toFixed(2)}</span>
                 </div>
               </div>
 
@@ -375,10 +470,16 @@ export default function CheckoutPage() {
                 type="submit"
                 form="checkout-form"
                 disabled={submitting || !cartData}
-                onClick={handleSubmit}
-                className="w-full bg-yellow-500 text-black py-3 rounded-lg font-bold hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="w-full bg-gradient-to-r from-yellow-500 to-amber-500 text-black py-3 rounded-lg font-bold hover:from-yellow-600 hover:to-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] active:scale-95"
               >
-                {submitting ? "Placing Order..." : "Place Order"}
+                {submitting ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
+                    Placing Order...
+                  </span>
+                ) : (
+                  "Place Order"
+                )}
               </button>
 
               <div className="mt-4 text-xs text-gray-400 text-center">
@@ -388,6 +489,23 @@ export default function CheckoutPage() {
           </div>
         </div>
       </div>
+
+      <style jsx>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(234, 179, 8, 0.5);
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: rgba(234, 179, 8, 0.8);
+        }
+      `}</style>
     </div>
   );
 }
