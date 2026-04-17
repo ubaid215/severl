@@ -215,7 +215,7 @@ export function useOptimizedCart() {
         } finally {
           globalFetchPromise = null
         }
-      })
+      }, 100)
     })
 
     try {
@@ -257,90 +257,102 @@ export function useOptimizedCart() {
     }
   }, [sessionId, fetchCart])
 
+  // FIXED: Enhanced add to cart with variantId support and price handling
   const addToCart = useCallback(async (foodItemId: string, quantity: number = 1, variantId?: string) => {
-  if (!sessionId) return
-
-  // 1. OPTIMISTIC UPDATE — update UI instantly before any API call
-  if (globalCartCache.data) {
-    const foodItem = globalCartCache.data.items.find(i => i.foodItemId === foodItemId)
-    // Only optimistically update count; price will be corrected by background sync
-    const optimisticCart: Cart = {
-      ...globalCartCache.data,
-      totalItems: globalCartCache.data.totalItems + quantity,
+    if (!sessionId) {
+      console.error('❌ No session ID available')
+      return
     }
-    globalCartCache.data = optimisticCart
-    setCart(optimisticCart)
-  }
 
-  try {
-    globalCartCache.timestamp = 0
+    try {
+      // Immediately invalidate cache
+      globalCartCache.timestamp = 0
+      
+      console.log('🛒 Adding item to cart:', { foodItemId, quantity, variantId, sessionId })
 
-    const requestBody: any = { sessionId, foodItemId, quantity }
-    if (variantId) requestBody.variantId = variantId
+      // Build request body - only include variantId if provided
+      const requestBody: any = { 
+        sessionId, 
+        foodItemId, 
+        quantity 
+      }
+      
+      if (variantId) {
+        requestBody.variantId = variantId
+      }
 
-    const response = await fetch('/api/cart', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody)
-    })
+      const response = await fetch('/api/cart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      })
 
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`)
+      }
 
-    const data = await response.json()
-    if (data.success) {
-      // 2. Background sync — no await, user already sees the update
-      fetchCart(true)
-      window.dispatchEvent(new CustomEvent('cartUpdated', {
-        detail: { source: 'addToCart', foodItemId, quantity, variantId }
-      }))
-      localStorage.setItem('cartUpdated', Date.now().toString())
-    } else {
-      // Revert optimistic update on failure
-      fetchCart(true)
-      throw new Error(data.message || 'Failed to add item to cart')
+      const data = await response.json()
+      console.log('✅ Add to cart response:', data)
+      
+      if (data.success) {
+        // Fetch updated cart immediately to get the correct price
+        const updatedCart = await fetchCart(true)
+        
+        // Log the added item price for verification
+        const addedItem = updatedCart?.items.find(item => item.foodItemId === foodItemId)
+        if (addedItem) {
+          console.log(`💰 Item "${addedItem.foodItem.name}" added with price: ${addedItem.price}`, 
+            addedItem.variant ? `(Variant: ${addedItem.variant.label})` : '(No variant)')
+        }
+        
+        // Trigger multiple update methods for maximum compatibility
+        window.dispatchEvent(new CustomEvent('cartUpdated', { 
+          detail: { source: 'addToCart', foodItemId, quantity, variantId } 
+        }))
+        
+        // Also update localStorage as a backup sync method
+        localStorage.setItem('cartUpdated', Date.now().toString())
+        
+        console.log('🎉 Item added to cart and events dispatched')
+      } else {
+        throw new Error(data.message || 'Failed to add item to cart')
+      }
+    } catch (error) {
+      console.error('❌ Error adding to cart:', error)
+      // Even on error, refresh cart to ensure sync
+      await fetchCart(true)
+      throw error // Re-throw so FoodCard can handle it
     }
-  } catch (error) {
-    // Revert on error
-    fetchCart(true)
-    throw error
-  }
-}, [sessionId, fetchCart])
+  }, [sessionId, fetchCart])
 
   // Enhanced remove from cart
   const removeFromCart = useCallback(async (cartItemId: string) => {
-  if (!sessionId) return
+    if (!sessionId) return
 
-  // Optimistic remove
-  if (globalCartCache.data) {
-    const item = globalCartCache.data.items.find(i => i.id === cartItemId)
-    if (item) {
-      const optimistic: Cart = {
-        ...globalCartCache.data,
-        items: globalCartCache.data.items.filter(i => i.id !== cartItemId),
-        totalItems: globalCartCache.data.totalItems - item.quantity,
-        totalPrice: globalCartCache.data.totalPrice - (item.price * item.quantity),
+    try {
+      globalCartCache.timestamp = 0
+
+      console.log('🗑️ Removing item from cart:', cartItemId)
+
+      const response = await fetch(`/api/cart/${cartItemId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId })
+      })
+
+      if (response.ok) {
+        await fetchCart(true)
+        window.dispatchEvent(new CustomEvent('cartUpdated', { 
+          detail: { source: 'removeFromCart', cartItemId } 
+        }))
+        localStorage.setItem('cartUpdated', Date.now().toString())
       }
-      globalCartCache.data = optimistic
-      setCart(optimistic)
+    } catch (error) {
+      console.error('❌ Error removing from cart:', error)
+      await fetchCart(true)
     }
-  }
-
-  try {
-    globalCartCache.timestamp = 0
-    const response = await fetch(`/api/cart/${cartItemId}`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId })
-    })
-    if (response.ok) {
-      fetchCart(true) // background sync
-      window.dispatchEvent(new CustomEvent('cartUpdated', { detail: { source: 'removeFromCart', cartItemId } }))
-      localStorage.setItem('cartUpdated', Date.now().toString())
-    }
-  } catch (error) {
-    fetchCart(true) // revert
-  }
-}, [sessionId, fetchCart])
+  }, [sessionId, fetchCart])
 
   // Enhanced update quantity
   const updateQuantity = useCallback(async (cartItemId: string, quantity: number) => {
