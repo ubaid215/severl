@@ -73,6 +73,35 @@ export class UserModel {
     })
   }
 
+  static async updateEmail(id: string, newEmail: string) {
+  return await prisma.user.update({
+    where: { id },
+    data: { email: newEmail },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      updatedAt: true,
+    },
+  })
+}
+
+static async updatePassword(id: string, newPassword: string) {
+  const hashedPassword = await bcrypt.hash(newPassword, 12)
+  return await prisma.user.update({
+    where: { id },
+    data: { password: hashedPassword },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      updatedAt: true,
+    },
+  })
+}
+
   static async updateRole(id: string, role: Role) {
     return await prisma.user.update({
       where: { id },

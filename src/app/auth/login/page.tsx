@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Eye, EyeOff } from 'lucide-react'
 
 interface FormData {
   email: string
@@ -24,6 +25,7 @@ export default function LoginPage() {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const router = useRouter()
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -79,6 +81,10 @@ export default function LoginPage() {
     }
   }
 
+  const togglePasswordVisibility = () => {
+    setShowPassword(!showPassword)
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-950 px-4">
       <div className="w-full max-w-md bg-gray-900 rounded-2xl shadow-yellow-50 shadow-lg p-8">
@@ -127,18 +133,32 @@ export default function LoginPage() {
             >
               Password
             </label>
-            <input
-              type="password"
-              id="password"
-              name="password"
-              placeholder="••••••••"
-              value={formData.password}
-              onChange={handleInputChange}
-              onKeyPress={(e) => e.key === 'Enter' && handleSubmit()}
-              className="mt-2 w-full rounded-lg bg-gray-800 text-gray-200 border border-gray-700 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-yellow-500 disabled:opacity-50"
-              required
-              disabled={loading}
-            />
+            <div className="relative mt-2">
+              <input
+                type={showPassword ? "text" : "password"}
+                id="password"
+                name="password"
+                placeholder="••••••••"
+                value={formData.password}
+                onChange={handleInputChange}
+                onKeyPress={(e) => e.key === 'Enter' && handleSubmit()}
+                className="w-full rounded-lg bg-gray-800 text-gray-200 border border-gray-700 px-4 py-3 pr-12 focus:outline-none focus:ring-2 focus:ring-yellow-500 disabled:opacity-50"
+                required
+                disabled={loading}
+              />
+              <button
+                type="button"
+                onClick={togglePasswordVisibility}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-yellow-400 transition-colors focus:outline-none"
+                disabled={loading}
+              >
+                {showPassword ? (
+                  <EyeOff className="h-5 w-5" />
+                ) : (
+                  <Eye className="h-5 w-5" />
+                )}
+              </button>
+            </div>
           </div>
 
           <button

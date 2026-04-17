@@ -6,7 +6,7 @@ import { CategoryCard } from './CategoryCard'
 import { SkeletonCard } from './SkeletonCard'
 
 // Category names to exclude from display
-const EXCLUDED_CATEGORIES = ['Drink', 'Drinks', 'Beverage', 'Beverages', 'Sauce', 'Maiyo']
+const EXCLUDED_CATEGORIES = ['Drink', 'Drinks', 'Beverage', 'Beverages', 'Sauce', 'Maiyo', 'deals', 'several deals']
 
 export function CategoriesSection() {
   const { categories, isLoading, error } = useCategories()

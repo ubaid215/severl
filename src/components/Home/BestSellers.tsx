@@ -30,7 +30,7 @@ interface FoodItem {
   variants?: Variant[];
 }
 
-const BESTSELLER_QUERIES = ['zinger', 'several', 'wings', 'shawarma'];
+const BESTSELLER_QUERIES = ['zinger Burger', 'loaded fries', 'special Platter', 'chicken shawarma'];
 
 // ── Card ────────────────────────────────────────────────────────────────────
 const BestSellerCard = ({ item, index }: { item: FoodItem; index: number }) => {

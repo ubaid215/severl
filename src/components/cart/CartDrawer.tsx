@@ -454,9 +454,6 @@ export default function CartDrawer({ isOpen, onCloseAction }: CartDrawerProps) {
                     <span>Total:</span>
                     <span className="text-yellow-500">Rs {cart.totalPrice.toFixed(2)}</span>
                   </div>
-                  <div className="text-xs sm:text-sm text-gray-400 text-center">
-                    Delivery charges will be calculated at checkout
-                  </div>
                 </div>
 
                 <div className="space-y-2">

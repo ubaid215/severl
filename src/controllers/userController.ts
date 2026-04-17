@@ -79,6 +79,152 @@ export class UserController {
 }
 
 
+
+static async changeEmail(req: NextRequest) {
+  try {
+    // 1. Auth check
+    const token = UserController.extractTokenFromRequest(req)
+    if (!token) {
+      return NextResponse.json({ error: 'Authorization token required' }, { status: 401 })
+    }
+
+    let decoded: any
+    try {
+      decoded = UserController.verifyToken(token)
+    } catch {
+      return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 })
+    }
+
+    // 2. Role guard — only ADMIN / SUPER_ADMIN
+    if (decoded.role !== 'ADMIN' && decoded.role !== 'SUPER_ADMIN') {
+      return NextResponse.json({ error: 'Access denied. Admin privileges required.' }, { status: 403 })
+    }
+
+    // 3. Parse body
+    const { newEmail, currentPassword } = await req.json()
+    if (!newEmail || !currentPassword) {
+      return NextResponse.json(
+        { error: 'newEmail and currentPassword are required' },
+        { status: 400 }
+      )
+    }
+
+    // 4. Basic email format check
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(newEmail)) {
+      return NextResponse.json({ error: 'Invalid email format' }, { status: 400 })
+    }
+
+    // 5. Fetch current user (with password) to verify currentPassword
+    const user = await UserModel.findByEmail(decoded.email)
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    const isValidPassword = await UserModel.validatePassword(currentPassword, user.password)
+    if (!isValidPassword) {
+      return NextResponse.json({ error: 'Current password is incorrect' }, { status: 401 })
+    }
+
+    // 6. Check new email isn't already taken
+    const existingUser = await UserModel.findByEmail(newEmail)
+    if (existingUser) {
+      return NextResponse.json({ error: 'Email is already in use' }, { status: 409 })
+    }
+
+    // 7. Perform the update
+    const updated = await UserModel.updateEmail(user.id, newEmail)
+
+    console.log(`✅ Email changed for user ${user.id}: ${user.email} → ${newEmail}`)
+    return NextResponse.json({
+      success: true,
+      message: 'Email updated successfully',
+      data: updated,
+    })
+  } catch (error) {
+    console.error('Change email error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+static async changePassword(req: NextRequest) {
+  try {
+    // 1. Auth check
+    const token = UserController.extractTokenFromRequest(req)
+    if (!token) {
+      return NextResponse.json({ error: 'Authorization token required' }, { status: 401 })
+    }
+
+    let decoded: any
+    try {
+      decoded = UserController.verifyToken(token)
+    } catch {
+      return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 })
+    }
+
+    // 2. Role guard
+    if (decoded.role !== 'ADMIN' && decoded.role !== 'SUPER_ADMIN') {
+      return NextResponse.json({ error: 'Access denied. Admin privileges required.' }, { status: 403 })
+    }
+
+    // 3. Parse body
+    const { currentPassword, newPassword, confirmNewPassword } = await req.json()
+    if (!currentPassword || !newPassword || !confirmNewPassword) {
+      return NextResponse.json(
+        { error: 'currentPassword, newPassword, and confirmNewPassword are required' },
+        { status: 400 }
+      )
+    }
+
+    // 4. New password match check
+    if (newPassword !== confirmNewPassword) {
+      return NextResponse.json({ error: 'New passwords do not match' }, { status: 400 })
+    }
+
+    // 5. Minimum password strength
+    if (newPassword.length < 8) {
+      return NextResponse.json(
+        { error: 'New password must be at least 8 characters' },
+        { status: 400 }
+      )
+    }
+
+    // 6. Fetch user with password hash
+    const user = await UserModel.findByEmail(decoded.email)
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    const isValidPassword = await UserModel.validatePassword(currentPassword, user.password)
+    if (!isValidPassword) {
+      return NextResponse.json({ error: 'Current password is incorrect' }, { status: 401 })
+    }
+
+    // 7. Prevent reusing the same password
+    const isSamePassword = await UserModel.validatePassword(newPassword, user.password)
+    if (isSamePassword) {
+      return NextResponse.json(
+        { error: 'New password must be different from the current password' },
+        { status: 400 }
+      )
+    }
+
+    // 8. Perform the update
+    const updated = await UserModel.updatePassword(user.id, newPassword)
+
+    console.log(`✅ Password changed for user ${user.id}`)
+    return NextResponse.json({
+      success: true,
+      message: 'Password updated successfully',
+      data: updated,
+    })
+  } catch (error) {
+    console.error('Change password error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+
   static async getProfile(req: NextRequest) {
     try {
       const authHeader = req.headers.get('authorization')

@@ -17,6 +17,7 @@ import {
   DollarSignIcon,
   Home,
   Menu,
+  Settings,
   X
 } from 'lucide-react'
 
@@ -91,7 +92,8 @@ export default function AdminSideBar({ user }: AdminSideBarProps) {
     { label: 'All Orders', href: '/admin/orders', icon: ClipboardList },
     { label: 'Create Orders', href: '/admin/orders/create', icon: ClipboardCheckIcon },
     { label: 'Income', href: '/admin/revenue', icon: DollarSignIcon },
-    { label: 'Analytics', href: '/admin/analytics', icon: TrendingUp }
+    { label: 'Analytics', href: '/admin/analytics', icon: TrendingUp },
+    { label: 'Settings',      href: '/admin/settings',      icon: Settings },
   ]
 
   const isActiveRoute = (href: string) => {
