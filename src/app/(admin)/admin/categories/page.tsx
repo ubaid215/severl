@@ -416,7 +416,7 @@ function CategoryCard({
         </div>
 
         {/* Actions */}
-        <div className="absolute top-2.5 right-2.5 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute top-2.5 right-2.5 flex gap-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
           <button
             onClick={onToggle}
             title={category.isActive ? 'Deactivate category' : 'Activate category'}

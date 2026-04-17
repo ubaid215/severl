@@ -47,7 +47,7 @@ export default function Footer() {
               </div>
               <div className="flex items-center justify-center gap-2 text-gray-300">
                 <Mail className="w-4 h-4 text-yellow-500" />
-                <span>info@severl.com</span>
+                <span>info@severl.life</span>
               </div>
               <div className="flex items-center justify-center gap-2 text-gray-300">
                 <MapPin className="w-4 h-4 text-yellow-500" />
@@ -223,7 +223,7 @@ export default function Footer() {
                 <div className="flex items-center gap-2">
                   <Mail className="w-4 h-4 text-yellow-500" />
                   <a
-                    href="mailto:info@severl.com"
+                    href="mailto:info@severl.life"
                     className="text-gray-300 hover:text-yellow-500 transition-colors"
                   >
                     info@severl.life

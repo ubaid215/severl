@@ -154,7 +154,7 @@ export default function FoodCard({ foodItem }: FoodCardProps) {
       {/* Deal badge with animation - responsive positioning */}
       {isDeals && (
         <div className="absolute top-2 left-2 sm:top-3 sm:left-3 z-20 flex items-center gap-1 sm:gap-1.5 bg-gradient-to-r from-red-500 to-orange-500 text-white px-2 py-1 sm:px-3 sm:py-1.5 rounded-full text-[10px] sm:text-[11px] font-bold shadow-lg animate-pulse">
-          <Flame className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+          {/* <Flame className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> */}
           <span className="hidden xs:inline">HOT DEAL</span>
           {/* <span className="xs:hidden">HOT</span> */}
         </div>
