@@ -269,11 +269,17 @@ export class FoodItemModel {
   }
 
   static async delete(id: string) {
-    return await prisma.foodItem.delete({
-      where: { id },
-      select: { id: true },
-    })
-  }
+  // First, delete all cart items that reference this food item
+  await prisma.cartItem.deleteMany({
+    where: { foodItemId: id }
+  });
+  
+  // Then delete the food item
+  return await prisma.foodItem.delete({
+    where: { id },
+    select: { id: true },
+  });
+}
 
   static async toggleAvailability(id: string) {
     const foodItem = await prisma.foodItem.findUnique({

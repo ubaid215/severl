@@ -226,7 +226,7 @@ export default function Footer() {
                     href="mailto:info@severl.com"
                     className="text-gray-300 hover:text-yellow-500 transition-colors"
                   >
-                    info@severl.com
+                    info@severl.life
                   </a>
                 </div>
               </div>
