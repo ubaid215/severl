@@ -32,7 +32,6 @@ export interface UpdateFoodItemData {
   image?: string
   categoryId?: string
   isAvailable?: boolean
-  // variants should not be directly updatable here
 }
 
 export interface CreateVariantData {
@@ -40,7 +39,7 @@ export interface CreateVariantData {
   price: number
   isDefault?: boolean
   sortOrder?: number
-  isActive?: boolean  // Make this optional
+  isActive?: boolean
 }
 
 export interface UpdateVariantData {
@@ -104,7 +103,7 @@ export class CategoryModel {
       select: {
         ...categorySelect,
         foodItems: {
-          where: { isAvailable: true },
+          where: { isAvailable: true, deletedAt: null },
           orderBy: { name: 'asc' },
           select: foodItemSelect,
         },
@@ -121,6 +120,7 @@ export class CategoryModel {
         createdAt: true,
         updatedAt: true,
         foodItems: {
+          where: { deletedAt: null },
           orderBy: { name: 'asc' },
           select: foodItemSelect,
         },
@@ -133,7 +133,7 @@ export class CategoryModel {
   }
 
   static async delete(id: string) {
-    const count = await prisma.foodItem.count({ where: { categoryId: id } })
+    const count = await prisma.foodItem.count({ where: { categoryId: id, deletedAt: null } })
     if (count > 0) throw new Error('Cannot delete category with food items')
     return await prisma.category.delete({ where: { id }, select: { id: true } })
   }
@@ -160,45 +160,37 @@ export class FoodItemModel {
    * to the default variant's price (or the first variant if none is marked default).
    */
   static async create(data: CreateFoodItemData) {
-  const { variants, ...itemData } = data
+    const { variants, ...itemData } = data
 
-  // Don't convert to Decimal for Prisma input
-  if (!variants || variants.length === 0) {
-    return await prisma.foodItem.create({
-      data: itemData, // Pass the original data with number price
-      select: foodItemSelect,
+    if (!variants || variants.length === 0) {
+      return await prisma.foodItem.create({
+        data: itemData,
+        select: foodItemSelect,
+      })
+    }
+
+    const sanitisedVariants = FoodItemModel.ensureSingleDefault(variants)
+    const defaultVariant = sanitisedVariants.find((v) => v.isDefault) ?? sanitisedVariants[0]
+    const basePrice = defaultVariant.price
+
+    return await prisma.$transaction(async (tx) => {
+      const foodItem = await tx.foodItem.create({
+        data: {
+          ...itemData,
+          price: basePrice,
+          variants: {
+            create: sanitisedVariants.map((v) => ({ ...v, price: v.price })),
+          },
+        },
+        select: foodItemSelect,
+      })
+
+      return {
+        ...foodItem,
+        price: Number(foodItem.price),
+      }
     })
   }
-
-  // Ensure exactly one default
-  const sanitisedVariants = FoodItemModel.ensureSingleDefault(variants)
-
-  // Sync base price to the default variant price
-  const defaultVariant = sanitisedVariants.find((v) => v.isDefault) ?? sanitisedVariants[0]
-  const basePrice = defaultVariant.price // Keep as number
-
-  return await prisma.$transaction(async (tx) => {
-    const foodItem = await tx.foodItem.create({
-      data: {
-        ...itemData,
-        price: basePrice, // Pass as number
-        variants: { 
-          create: sanitisedVariants.map(v => ({
-            ...v,
-            price: v.price // Pass as number
-          }))
-        },
-      },
-      select: foodItemSelect,
-    })
-    
-    // Convert Decimal to number for response if needed
-    return {
-      ...foodItem,
-      price: Number(foodItem.price)
-    }
-  })
-}
 
   static async getAll(categoryId?: string) {
     const items = await prisma.foodItem.findMany({
@@ -210,15 +202,11 @@ export class FoodItemModel {
       select: foodItemSelect,
       orderBy: { name: 'asc' },
     })
-    
-    // Convert Decimal to number for response
-    return items.map(item => ({
+
+    return items.map((item) => ({
       ...item,
       price: Number(item.price),
-      variants: item.variants.map(v => ({
-        ...v,
-        price: Number(v.price)
-      }))
+      variants: item.variants.map((v) => ({ ...v, price: Number(v.price) })),
     }))
   }
 
@@ -227,59 +215,56 @@ export class FoodItemModel {
       where: { id },
       select: { ...foodItemSelect, createdAt: true, updatedAt: true },
     })
-    
+
     if (!item) return null
-    
-    // Convert Decimal to number for response
+
     return {
       ...item,
       price: Number(item.price),
-      variants: item.variants.map(v => ({
-        ...v,
-        price: Number(v.price)
-      }))
+      variants: item.variants.map((v) => ({ ...v, price: Number(v.price) })),
     }
   }
 
   static async update(id: string, data: UpdateFoodItemData) {
-    // Remove variants from data if present (variants should be updated separately)
-    const { ...updateData } = data
-    
-    // Convert price to Decimal if present
-    const updateDataWithDecimal: any = { ...updateData }
-    if (updateData.price !== undefined) {
-      updateDataWithDecimal.price = new Decimal(updateData.price.toString())
+    const updateData: any = { ...data }
+    if (data.price !== undefined) {
+      updateData.price = new Decimal(data.price.toString())
     }
-    
+
     const updated = await prisma.foodItem.update({
       where: { id },
-      data: updateDataWithDecimal,
+      data: updateData,
       select: foodItemSelect,
     })
-    
-    // Convert Decimal to number for response
+
     return {
       ...updated,
       price: Number(updated.price),
-      variants: updated.variants.map(v => ({
-        ...v,
-        price: Number(v.price)
-      }))
+      variants: updated.variants.map((v) => ({ ...v, price: Number(v.price) })),
     }
   }
 
+  /**
+   * Soft delete — sets deletedAt timestamp instead of removing the row.
+   * Preserves order history integrity (order_items.foodItemId FK stays valid).
+   * The item is immediately excluded from all getAll/search queries.
+   */
   static async delete(id: string) {
-  // First, delete all cart items that reference this food item
-  await prisma.cartItem.deleteMany({
-    where: { foodItemId: id }
-  });
-  
-  // Then delete the food item
-  return await prisma.foodItem.delete({
-    where: { id },
-    select: { id: true },
-  });
-}
+    const existing = await prisma.foodItem.findUnique({
+      where: { id },
+      select: { id: true },
+    })
+    if (!existing) throw new Error('Food item not found')
+
+    // Soft delete cart items referencing this food item so active carts stay clean
+    await prisma.cartItem.deleteMany({ where: { foodItemId: id } })
+
+    return await prisma.foodItem.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+      select: { id: true },
+    })
+  }
 
   static async toggleAvailability(id: string) {
     const foodItem = await prisma.foodItem.findUnique({
@@ -291,14 +276,11 @@ export class FoodItemModel {
       data: { isAvailable: !foodItem?.isAvailable },
       select: foodItemSelect,
     })
-    
+
     return {
       ...updated,
       price: Number(updated.price),
-      variants: updated.variants.map(v => ({
-        ...v,
-        price: Number(v.price)
-      }))
+      variants: updated.variants.map((v) => ({ ...v, price: Number(v.price) })),
     }
   }
 
@@ -314,31 +296,25 @@ export class FoodItemModel {
       },
       select: foodItemSelect,
     })
-    
-    return items.map(item => ({
+
+    return items.map((item) => ({
       ...item,
       price: Number(item.price),
-      variants: item.variants.map(v => ({
-        ...v,
-        price: Number(v.price)
-      }))
+      variants: item.variants.map((v) => ({ ...v, price: Number(v.price) })),
     }))
   }
 
   // ── Variant helpers ──────────────────────────────────────────────────────────
 
-  /** Guarantee exactly one variant is marked isDefault. */
   private static ensureSingleDefault(variants: CreateVariantData[]): CreateVariantData[] {
     const hasDefault = variants.some((v) => v.isDefault)
     if (hasDefault) {
-      // Keep only the first one that is default
       let found = false
       return variants.map((v) => {
         if (v.isDefault && !found) { found = true; return v }
         return { ...v, isDefault: false }
       })
     }
-    // Mark the first variant as default
     return variants.map((v, i) => ({ ...v, isDefault: i === 0 }))
   }
 }
@@ -348,7 +324,6 @@ export class FoodItemModel {
 export class VariantModel {
   static async create(foodItemId: string, data: CreateVariantData) {
     return await prisma.$transaction(async (tx) => {
-      // If this variant is default, unset existing defaults first
       if (data.isDefault) {
         await tx.foodItemVariant.updateMany({
           where: { foodItemId, isDefault: true },
@@ -357,26 +332,18 @@ export class VariantModel {
       }
 
       const variant = await tx.foodItemVariant.create({
-        data: { 
-          ...data, 
-          foodItemId,
-          price: data.price // Pass number directly, not Decimal
-        },
+        data: { ...data, foodItemId, price: data.price },
         select: variantSelect,
       })
 
-      // Sync base price on the parent item to the new default
       if (data.isDefault) {
         await tx.foodItem.update({
           where: { id: foodItemId },
-          data: { price: data.price }, // Pass number directly
+          data: { price: data.price },
         })
       }
 
-      return {
-        ...variant,
-        price: Number(variant.price)
-      }
+      return { ...variant, price: Number(variant.price) }
     })
   }
 
@@ -386,11 +353,8 @@ export class VariantModel {
       select: variantSelect,
       orderBy: { sortOrder: 'asc' },
     })
-    
-    return variants.map(v => ({
-      ...v,
-      price: Number(v.price)
-    }))
+
+    return variants.map((v) => ({ ...v, price: Number(v.price) }))
   }
 
   static async getById(id: string) {
@@ -398,13 +362,9 @@ export class VariantModel {
       where: { id },
       select: { ...variantSelect, foodItemId: true },
     })
-    
+
     if (!variant) return null
-    
-    return {
-      ...variant,
-      price: Number(variant.price)
-    }
+    return { ...variant, price: Number(variant.price) }
   }
 
   static async update(id: string, data: UpdateVariantData) {
@@ -415,7 +375,6 @@ export class VariantModel {
       })
       if (!existing) throw new Error('Variant not found')
 
-      // Setting a new default → clear old one
       if (data.isDefault && !existing.isDefault) {
         await tx.foodItemVariant.updateMany({
           where: { foodItemId: existing.foodItemId, isDefault: true },
@@ -423,12 +382,8 @@ export class VariantModel {
         })
       }
 
-      // Prepare update data - don't convert price to Decimal
       const updateData: any = { ...data }
-      // Remove price if it's undefined to avoid overwriting with undefined
-      if (updateData.price === undefined) {
-        delete updateData.price
-      }
+      if (updateData.price === undefined) delete updateData.price
 
       const variant = await tx.foodItemVariant.update({
         where: { id },
@@ -436,18 +391,14 @@ export class VariantModel {
         select: variantSelect,
       })
 
-      // Keep parent base price in sync when default changes
       if (data.isDefault && data.price !== undefined) {
         await tx.foodItem.update({
           where: { id: existing.foodItemId },
-          data: { price: data.price }, // Pass number directly
+          data: { price: data.price },
         })
       }
 
-      return {
-        ...variant,
-        price: Number(variant.price)
-      }
+      return { ...variant, price: Number(variant.price) }
     })
   }
 
@@ -460,7 +411,6 @@ export class VariantModel {
 
     await prisma.foodItemVariant.delete({ where: { id } })
 
-    // If the deleted variant was the default, promote the next one
     if (variant.isDefault) {
       const next = await prisma.foodItemVariant.findFirst({
         where: { foodItemId: variant.foodItemId, isActive: true },
@@ -475,7 +425,7 @@ export class VariantModel {
           }),
           prisma.foodItem.update({
             where: { id: variant.foodItemId },
-            data: { price: next.price }, // next.price is already a Decimal from DB, this is fine
+            data: { price: next.price },
           }),
         ])
       }
@@ -490,16 +440,13 @@ export class VariantModel {
       select: { isActive: true },
     })
     if (!variant) throw new Error('Variant not found')
-    
+
     const updated = await prisma.foodItemVariant.update({
       where: { id },
       data: { isActive: !variant.isActive },
       select: variantSelect,
     })
-    
-    return {
-      ...updated,
-      price: Number(updated.price)
-    }
+
+    return { ...updated, price: Number(updated.price) }
   }
 }
