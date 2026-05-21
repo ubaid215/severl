@@ -1,4 +1,4 @@
-// app/menu/page.tsx (updated - with Drink category filtered out)
+// app/menu/page.tsx
 'use client'
 
 import { useEffect, useState, Suspense, useTransition, useMemo } from 'react'
@@ -28,9 +28,6 @@ interface Category {
   image?: string
   isActive: boolean
 }
-
-// Category names to exclude from display
-const EXCLUDED_CATEGORIES = ['Drink', 'Drinks', 'Beverage', 'Beverages']
 
 // ─── Skeleton loaders ──────────────────────────────────────────────────────────
 
@@ -98,13 +95,8 @@ function MenuContent() {
   const [heroImageLoaded, setHeroImageLoaded] = useState(false)
   const [isPending, startTransition] = useTransition()
 
-  // Filter out excluded categories
   const filteredCategories = useMemo(() => {
-    return categories.filter(
-      category => !EXCLUDED_CATEGORIES.some(
-        excluded => category.name.toLowerCase() === excluded.toLowerCase()
-      ) && category.isActive
-    )
+    return categories.filter(category => category.isActive)
   }, [categories])
 
   // Initial data load
@@ -137,14 +129,7 @@ function MenuContent() {
   }, [activeCategory])
 
   // ─── Derived data ────────────────────────────────────────────────────────────
-  // Filter out food items that belong to excluded categories
-  const availableItems = foodItems.filter(item => {
-    const itemCategory = item.category
-    const isExcludedCategory = EXCLUDED_CATEGORIES.some(
-      excluded => itemCategory?.name?.toLowerCase() === excluded.toLowerCase()
-    )
-    return item.isAvailable && !isExcludedCategory
-  })
+  const availableItems = foodItems.filter(item => item.isAvailable)
 
   const filteredItems = activeCategory
     ? availableItems.filter(item => item.category.id === activeCategory)
